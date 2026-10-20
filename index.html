@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="uz" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhishGuard - Raqamli Tahdidlarga Qarshi Kompleks Himoya</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            900: '#14532d',
+                            accent: '#06b6d4',
+                            dark: '#070d1e',
+                            card: '#0f172a',
+                            border: '#1e293b'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js for Stats -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #070d1e; color: #f8fafc; }
+        .glass-panel { background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(30, 41, 59, 0.8); }
+        .glow-green { box-shadow: 0 0 20px rgba(34, 197, 94, 0.2); }
+        .glow-red { box-shadow: 0 0 20px rgba(239, 68, 68, 0.25); }
+        .glow-cyan { box-shadow: 0 0 20px rgba(6, 182, 212, 0.2); }
+        /* Audio Spectrum Animation */
+        .bar-anim { animation: soundBar 1.2s ease-in-out infinite alternate; }
+        @keyframes soundBar {
+            0% { height: 10%; }
+            100% { height: 100%; }
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #070d1e; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #22c55e; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col md:flex-row antialiased selection:bg-emerald-500 selection:text-white">
+
+    <!-- Mobile Top Header Bar -->
+    <div class="md:hidden flex items-center justify-between p-4 bg-[#0a1228] border-b border-slate-800 sticky top-0 z-50">
+        <div class="flex items-center space-x-3">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center font-black text-white shadow-lg glow-green">
+                <i class="fa-solid fa-shield-halved text-lg"></i>
+            </div>
+            <span class="font-bold text-lg text-white tracking-wider">PhishGuard</span>
+        </div>
+        <button id="mobileMenuBtn" onclick="toggleSidebar()" class="text-slate-300 hover:text-white p-2">
+            <i class="fa-solid fa-bars text-2xl"></i>
+        </button>
+    </div>
+
+    <!-- Sidebar Navigation -->
+    <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-72 bg-[#0a1228] border-r border-slate-800 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out flex flex-col justify-between">
+        <div class="p-5 overflow-y-auto">
+            <!-- Brand Logo -->
+            <div class="hidden md:flex items-center space-x-3 mb-6">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center font-black text-white shadow-lg glow-green">
+                    <i class="fa-solid fa-shield-halved text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-xl text-white tracking-wider leading-tight">PhishGuard</h1>
+                    <p class="text-[11px] text-emerald-400 font-medium" data-i18n="tagline">Raqamli Himoya Ekotizimi</p>
+                </div>
+            </div>
+
+            <!-- Language Switcher Dropdown -->
+            <div class="mb-6 bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5" data-i18n="langLabel">
+                    <i class="fa-solid fa-globe text-emerald-400"></i> Tizim Tili
+                </label>
+                <select id="langSelect" onchange="changeLanguage(this.value)" class="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer">
+                    <option value="uz_lat">O'zbekcha (Lotin)</option>
+                    <option value="uz_cyr">Ўзбекча (Кирилл)</option>
+                    <option value="ru">Русский</option>
+                    <option value="en">English</option>
+                </select>
+            </div>
+
+            <!-- Main Navigation Links -->
+            <nav class="space-y-1">
+                <button onclick="switchTab('dashboard')" class="nav-btn active w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
+                    <i class="fa-solid fa-chart-pie w-5 text-center text-sm"></i>
+                    <span data-i18n="navDashboard">Boshqaruv Paneli</span>
+                </button>
+                <button onclick="switchTab('urlScanner')" class="nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-slate-400 hover:text-white hover:bg-slate-800/60">
+                    <i class="fa-solid fa-link w-5 text-center text-sm"></i>
+                    <span>URL Scanner</span>
+                </button>
+                <button onclick="switchTab('messageGuard')" class="nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-slate-400 hover:text-white hover:bg-slate-800/60">
+                    <i class="fa-solid fa-message w-5 text-center text-sm"></i>
+                    <span>MessageGuard</span>
+                </button>
+                <button onclick="switchTab('sosGuard')" class="nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30">
+                    <i class="fa-solid fa-triangle-exclamation w-5 text-center text-sm text-rose-500 animate-pulse"></i>
+                    <span data-i18n="navSOS">SOS: "Men aldandim"</span>
+                </button>
+                <button onclick="switchTab('cardQrGuard')" class="nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-slate-400 hover:text-white hover:bg-slate-800/60">
+                    <i class="fa-solid fa-credit-card w-5 text-center text-sm"></i>
+                    <span>CardGuard & QR</span>
+                </button>
+                <button onclick="switchTab('fileApkGuard')" class="nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-slate-400 hover:text-white hover:bg-slate-800/60">
+                    <i class="fa-solid fa-file-shield w-5 text-center text-sm"></i>
+                    <span>FileGuard & APK</span>
+                </button>
+                <button onclick="switchTab('voiceGuard')" class="nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-slate-400 hover:text-white hover:bg-slate-800/60">
+                    <i class="fa-solid fa-microphone-lines w-5 text-center text-sm"></i>
+                    <span>VoiceGuard (AI)</span>
+                </button>
+                <button onclick="switchTab('cyberAcademy')" class="nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-slate-400 hover:text-white hover:bg-slate-800/60">
+                    <i class="fa-solid fa-graduation-cap w-5 text-center text-sm"></i>
+                    <span data-i18n="navAcademy">Cyber Academy</span>
+                </button>
+                <button onclick="switchTab('familyBusiness')" class="nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-slate-400 hover:text-white hover:bg-slate-800/60">
+                    <i class="fa-solid fa-users-gear w-5 text-center text-sm"></i>
+                    <span data-i18n="navFamily">Family & Business</span>
+                </button>
+            </nav>
+        </div>
+
+        <!-- System Status Footer -->
+        <div class="p-4 border-t border-slate-800 bg-slate-900/60">
+            <div class="flex items-center space-x-3">
+                <div class="relative">
+                    <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-emerald-500 absolute inset-0 animate-ping opacity-75"></div>
+                </div>
+                <div>
+                    <p class="text-xs font-bold text-slate-200" data-i18n="systemActive">Tizim Ishchi Holatda</p>
+                    <p class="text-[10px] text-slate-400">PhishGuard Pro AI v2.4</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 md:ml-72 p-4 md:p-8 overflow-y-auto min-h-screen">
+
+        <!-- Top Header Status Banner -->
+        <header class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 glass-panel p-5 rounded-2xl border border-slate-800">
+            <div class="flex items-center space-x-4">
+                <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-2xl shadow-inner">
+                    <i class="fa-solid fa-user-shield"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-white" id="pageTitle" data-i18n="navDashboard">Boshqaruv Paneli</h2>
+                    <p class="text-xs text-slate-400" data-i18n="headerSubtitle">Aktiv himoya monitoringi va so'nggi tahdid tahlillari</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-3 self-end md:self-auto">
+                <div class="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 flex items-center space-x-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span class="text-xs font-semibold text-emerald-400" data-i18n="threatDbLive">Tahdidlar Bazasi: Faol</span>
+                </div>
+                <div class="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 flex items-center space-x-2">
+                    <i class="fa-solid fa-shield text-cyan-400 text-xs"></i>
+                    <span class="text-xs font-semibold text-slate-200"><span id="userScore">100</span> / 100 Ball</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dynamic Content Tabs -->
+        
+        <!-- 1. DASHBOARD TAB -->
+        <div id="tab-dashboard" class="tab-content space-y-6">
+            <!-- Top Hero Cards Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="glass-panel p-5 rounded-2xl border border-slate-800 relative overflow-hidden">
+                    <div class="absolute -right-2 -bottom-2 text-slate-800 text-6xl opacity-30"><i class="fa-solid fa-shield-virus"></i></div>
+                    <p class="text-xs text-slate-400 font-medium" data-i18n="statScanned">Jami Tekshiruvlar</p>
+                    <h3 class="text-2xl font-extrabold text-white mt-1">1,482</h3>
+                    <p class="text-[10px] text-emerald-400 mt-2 flex items-center gap-1"><i class="fa-solid fa-arrow-trend-up"></i> +12% bu hafta</p>
+                </div>
+                <div class="glass-panel p-5 rounded-2xl border border-slate-800 relative overflow-hidden">
+                    <div class="absolute -right-2 -bottom-2 text-rose-950 text-6xl opacity-30"><i class="fa-solid fa-bug"></i></div>
+                    <p class="text-xs text-slate-400 font-medium" data-i18n="statBlocked">Bloklangan Fishing</p>
+                    <h3 class="text-2xl font-extrabold text-rose-400 mt-1">139</h3>
+                    <p class="text-[10px] text-rose-400 mt-2 flex items-center gap-1"><i class="fa-solid fa-triangle-exclamation"></i> 8 tasi bank imitatsiyasi</p>
+                </div>
+                <div class="glass-panel p-5 rounded-2xl border border-slate-800 relative overflow-hidden">
+                    <div class="absolute -right-2 -bottom-2 text-cyan-950 text-6xl opacity-30"><i class="fa-solid fa-brain"></i></div>
+                    <p class="text-xs text-slate-400 font-medium" data-i18n="statAiConf">AI Tahlil Aniqligi</p>
+                    <h3 class="text-2xl font-extrabold text-cyan-400 mt-1">99.4%</h3>
+                    <p class="text-[10px] text-cyan-400 mt-2 flex items-center gap-1"><i class="fa-solid fa-check-double"></i> Real-vaqt AI model</p>
+                </div>
+                <div class="glass-panel p-5 rounded-2xl border border-slate-800 relative overflow-hidden">
+                    <div class="absolute -right-2 -bottom-2 text-emerald-950 text-6xl opacity-30"><i class="fa-solid fa-user-check"></i></div>
+                    <p class="text-xs text-slate-400 font-medium" data-i18n="statProtectedUsers">Himoyalangan Baza</p>
+                    <h3 class="text-2xl font-extrabold text-emerald-400 mt-1">10,240+</h3>
+                    <p class="text-[10px] text-emerald-400 mt-2 flex items-center gap-1"><i class="fa-solid fa-users"></i> Oilalar & Kichik Biznes</p>
+                </div>
+            </div>
+
+            <!-- Quick Scanner Bar & Analytics Chart -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Quick Express Scanner -->
+                <div class="lg:col-span-2 glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-base font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-bolt text-amber-400"></i> <span data-i18n="quickScanTitle">Tezkor Havola yoki Matn Tekshiruvi</span>
+                        </h3>
+                        <span class="text-xs text-slate-400" data-i18n="quickScanDesc">Instant AI Guard</span>
+                    </div>
+
+                    <div class="relative">
+                        <textarea id="quickInput" rows="3" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 focus:ring-2 focus:ring-emerald-500 focus:outline-none resize-none" placeholder="Shubhali havola (URL) yoki xabar matnini shu yerga tashlang..."></textarea>
+                        <div class="flex flex-wrap gap-2 mt-2">
+                            <button onclick="setQuickSample('https://payme-uz.verify-security-login.com')" class="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded-lg border border-slate-700">📌 Sample URL (Fishing)</button>
+                            <button onclick="setQuickSample('Diqqat! Bank kartangiz bloklandi. Qulfdan chiqarish uchun SMS kodni 8800 ga yuboring.')" class="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded-lg border border-slate-700">📌 Sample SMS (Firibgarlik)</button>
+                            <button onclick="setQuickSample('https://tatu.uz')" class="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded-lg border border-slate-700">📌 Rasmiy Sayt (Xavfsiz)</button>
+                        </div>
+                    </div>
+
+                    <button onclick="runQuickScan()" class="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-slate-950 font-extrabold text-sm hover:opacity-90 transition-all shadow-lg glow-green flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-magnifying-glass font-black"></i>
+                        <span data-i18n="btnAnalyze">TEZKOR TAHLIL QILISH</span>
+                    </button>
+
+                    <div id="quickScanResult" class="hidden p-4 rounded-xl border transition-all"></div>
+                </div>
+
+                <!-- Threat Stats Chart -->
+                <div class="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-base font-bold text-white mb-2" data-i18n="chartTitle">Tahdid Turlari Bo'yicha Taqsimot</h3>
+                        <p class="text-xs text-slate-400 mb-4" data-i18n="chartSub">Oxirgi 30 kundagi statistik tahlil</p>
+                    </div>
+                    <div class="relative h-48 w-full flex items-center justify-center">
+                        <canvas id="threatChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Scans History -->
+            <div class="glass-panel p-6 rounded-2xl border border-slate-800">
+                <h3 class="text-base font-bold text-white mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-clock-rotate-left text-emerald-400"></i>
+                    <span data-i18n="recentScansTitle">So'nggi Tekshiruvlar Tarixi</span>
+                </h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs text-slate-300">
+                        <thead class="bg-slate-900/80 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+                            <tr>
+                                <th class="p-3">Ob'ekt / Manba</th>
+                                <th class="p-3">Tur</th>
+                                <th class="p-3">Xavf Darajasi</th>
+                                <th class="p-3">Sana</th>
+                                <th class="p-3 text-right">Tavsiya</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800/60">
+                            <tr class="hover:bg-slate-900/40">
+                                <td class="p-3 font-mono text-rose-400">click-uz.top/login.php</td>
+                                <td class="p-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px]">URL</span></td>
+                                <td class="p-3"><span class="bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded text-[10px] font-bold">98% XAVFLI</span></td>
+                                <td class="p-3 text-slate-400">Bugun, 19:42</td>
+                                <td class="p-3 text-right"><span class="text-rose-400 font-semibold">Tashrif buyurmang</span></td>
+                            </tr>
+                            <tr class="hover:bg-slate-900/40">
+                                <td class="p-3 font-mono text-emerald-400">tatu.uz/structure</td>
+                                <td class="p-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px]">URL</span></td>
+                                <td class="p-3"><span class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-[10px] font-bold">0% XAVFSIZ</span></td>
+                                <td class="p-3 text-slate-400">Bugun, 18:15</td>
+                                <td class="p-3 text-right"><span class="text-emerald-400 font-semibold">Ruxsat berilgan</span></td>
+                            </tr>
+                            <tr class="hover:bg-slate-900/40">
+                                <td class="p-3 font-mono text-amber-400">"Hisobingiz cheklandi, SMS kod..."</td>
+                                <td class="p-3"><span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px]">SMS</span></td>
+                                <td class="p-3"><span class="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded text-[10px] font-bold">92% SHUBHALI</span></td>
+                                <td class="p-3 text-slate-400">Kecha, 22:05</td>
+                                <td class="p-3 text-right"><span class="text-amber-400 font-semibold">Kod bermang</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. URL SCANNER TAB -->
+        <div id="tab-urlScanner" class="tab-content hidden space-y-6">
+            <div class="glass-panel p-6 rounded-2xl border border-slate-800 space-y-6">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-link text-emerald-400"></i> URL Scanner (Fishing & Domen Tahlili)
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-1" data-i18n="urlScannerDesc">Domen spoofing, SSL sertifikati va shubhali yo'naltirishlarni chuqur tekshirish</p>
+                </div>
+
+                <div class="space-y-3">
+                    <label class="block text-xs font-semibold text-slate-300" data-i18n="inputUrlLabel">Tekshiriluvchi Internet Manzili (URL)</label>
+                    <div class="flex gap-2">
+                        <input id="urlInput" type="url" placeholder="https://example.com/login" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-xs text-slate-200 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                        <button onclick="analyzeUrl()" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-6 py-3 rounded-xl text-xs transition-all shadow-lg glow-green flex items-center gap-2">
+                            <i class="fa-solid fa-magnifying-glass"></i> <span data-i18n="btnCheckUrl">Tekshirish</span>
+                        </button>
+                    </div>
+                    <div class="flex flex-wrap gap-2 pt-1">
+                        <span class="text-[10px] text-slate-400">Sinab ko'rish:</span>
+                        <button onclick="document.getElementById('urlInput').value='https://payme-uz.login-security-portal.top'; analyzeUrl();" class="text-[10px] text-rose-400 underline">payme-uz.login-security-portal.top</button>
+                        <button onclick="document.getElementById('urlInput').value='https://my.gov.uz'; analyzeUrl();" class="text-[10px] text-emerald-400 underline">my.gov.uz</button>
+                    </div>
+                </div>
+
+                <!-- Analysis Output Card -->
+                <div id="urlResultCard" class="hidden glass-panel p-6 rounded-xl border border-slate-800 space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+                        <div>
+                            <span id="urlResultBadge" class="px-3 py-1 rounded-full text-xs font-black uppercase"></span>
+                            <h4 id="urlResultDomain" class="text-lg font-bold text-white mt-2 font-mono"></h4>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-[10px] text-slate-400 block" data-i18n="threatScore">Xavf Balli</span>
+                            <span id="urlResultScore" class="text-2xl font-black"></span>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                        <div class="bg-slate-900/70 p-3 rounded-xl border border-slate-800">
+                            <span class="text-slate-400 block text-[10px]">Domen Egasi / Yosh:</span>
+                            <span id="urlResultAge" class="font-semibold text-slate-200"></span>
+                        </div>
+                        <div class="bg-slate-900/70 p-3 rounded-xl border border-slate-800">
+                            <span class="text-slate-400 block text-[10px]">SSL Sertifikat:</span>
+                            <span id="urlResultSsl" class="font-semibold text-slate-200"></span>
+                        </div>
+                        <div class="bg-slate-900/70 p-3 rounded-xl border border-slate-800">
+                            <span class="text-slate-400 block text-[10px]">Phishing Database:</span>
+                            <span id="urlResultDb" class="font-semibold text-slate-200"></span>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-800">
+                        <h5 class="text-xs font-bold text-amber-400 mb-1 flex items-center gap-2">
+                            <i class="fa-solid fa-circle-info"></i> <span data-i18n="whyUnsafe">Nega Xavfli yoki Shubhali?</span>
+                        </h5>
+                        <p id="urlResultReason" class="text-xs text-slate-300 leading-relaxed"></p>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-emerald-950/30 border border-emerald-500/30">
+                        <h5 class="text-xs font-bold text-emerald-400 mb-1 flex items-center gap-2">
+                            <i class="fa-solid fa-shield-check"></i> <span data-i18n="safeAction">Tavsiya Etiladigan Xavfsiz Harakat:</span>
+                        </h5>
+                        <p id="urlResultAction" class="text-xs text-slate-200"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. MESSAGE GUARD TAB -->
+        <div id="tab-messageGuard" class="tab-content hidden space-y-6">
+            <div class="glass-panel p-6 rounded-2xl border border-slate-800 space-y-6">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-message text-cyan-400"></i> MessageGuard (SMS, Telegram & Email Tahlili)
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-1" data-i18n="msgGuardDesc">Shoshiltirish, ruhiy psixologik bosim va maxfiy kod (OTP) so'rash belgilarini aniqlash</p>
+                </div>
+
+                <div class="space-y-3">
+                    <label class="block text-xs font-semibold text-slate-300" data-i18n="msgInputLabel">Kelgan Xabar Matnini Kiriting</label>
+                    <textarea id="msgInput" rows="4" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:outline-none" placeholder="Masalan: 'Hurmatli mijoz! Plastik kartangiz bloklandi. Qulfdan chiqarish uchun 8800 raqamiga yuborilgan kodni ayting...'"></textarea>
+                    
+                    <button onclick="analyzeMessage()" class="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-slate-950 font-extrabold text-xs transition-all shadow-lg glow-cyan flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-brain"></i> <span data-i18n="btnAnalyzeMsg">Xabar Matnini AI Orqali Tahlil Qilish</span>
+                    </button>
+                </div>
+
+                <!-- Message Output Result -->
+                <div id="msgResultCard" class="hidden glass-panel p-6 rounded-xl border border-slate-800 space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+                        <span id="msgRiskBadge" class="px-3 py-1 rounded-full text-xs font-black uppercase"></span>
+                        <div class="text-right">
+                            <span class="text-[10px] text-slate-400 block" data-i18n="scamProbability">Firibgarlik Ehtimoli</span>
+                            <span id="msgRiskPercent" class="text-2xl font-black"></span>
+                        </div>
+                    </div>
+
+                    <div id="msgTriggers" class="flex flex-wrap gap-2"></div>
+
+                    <div class="bg-slate-900/80 p-4 rounded-xl border border-slate-800 space-y-2">
+                        <h5 class="text-xs font-bold text-rose-400 flex items-center gap-2">
+                            <i class="fa-solid fa-triangle-exclamation"></i> Aniqlangan Psixologik Usullar (Ijtimoiy Muhandislik):
+                        </h5>
+                        <p id="msgExplanation" class="text-xs text-slate-300 leading-relaxed"></p>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-cyan-950/30 border border-cyan-500/30">
+                        <h5 class="text-xs font-bold text-cyan-400 mb-1 flex items-center gap-2">
+                            <i class="fa-solid fa-user-shield"></i> PhishGuard Maslahati:
+                        </h5>
+                        <p id="msgAdvice" class="text-xs text-slate-200"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. CARDGUARD & PAYMENT SHIELD TAB -->
+        <div id="tab-cardQrGuard" class="tab-content hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Card Security Rules -->
+                <div class="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-credit-card text-emerald-400"></i> CardGuard - Karta Himoyasi
+                    </h3>
+                    <p class="text-xs text-slate-400" data-i18n="cardGuardRulesDesc">Bank kartangiz xavfsizligini ta'minlash uchun oltin qoidalar</p>
+
+                    <div class="space-y-3 pt-2">
+                        <div class="p-3 bg-slate-900/80 rounded-xl border border-slate-800 flex items-start space-x-3">
+                            <i class="fa-solid fa-key text-rose-500 text-base mt-0.5"></i>
+                            <div>
+                                <h4 class="text-xs font-bold text-slate-200">SMS Kod (OTP) ni Hech Kimga Bermang</h4>
+                                <p class="text-[11px] text-slate-400 mt-0.5">Hatto bank xodimi yoki IIB xodimi deb o'zini tanishtirgan shaxsga ham SMS tasdiqlash kodini aytmang!</p>
+                            </div>
+                        </div>
+
+                        <div class="p-3 bg-slate-900/80 rounded-xl border border-slate-800 flex items-start space-x-3">
+                            <i class="fa-solid fa-shield-halved text-amber-400 text-base mt-0.5"></i>
+                            <div>
+                                <h4 class="text-xs font-bold text-slate-200">CVV va PIN Kod Maxfiyligi</h4>
+                                <p class="text-[11px] text-slate-400 mt-0.5">Kartaning orqa tarafidagi 3 xonali CVV kod va 4 xonali PIN kod faqat shaxsan sizga tegishli.</p>
+                            </div>
+                        </div>
+
+                        <div class="p-3 bg-slate-900/80 rounded-xl border border-slate-800 flex items-start space-x-3">
+                            <i class="fa-solid fa-link text-cyan-400 text-base mt-0.5"></i>
+                            <div>
+                                <h4 class="text-xs font-bold text-slate-200">Soxta To'lov Havolalari</h4>
+                                <p class="text-[11px] text-slate-400 mt-0.5">Olx yuzasidan kurerlik yoki 'Pochta to'lovi' bahonasida yuborilgan to'lov havolalariga karta ma'lumotini kiritmang.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- QR Code Guard Simulator -->
+                <div class="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-qrcode text-cyan-400"></i> QR Guard (QR-Kod Skaneri)
+                    </h3>
+                    <p class="text-xs text-slate-400">QR-kod ichidagi yashirin havola yoki buyruqni ochishdan oldin xavfsizlikka tekshiring</p>
+
+                    <div class="p-8 border-2 border-dashed border-slate-700 rounded-2xl text-center bg-slate-900/40 hover:bg-slate-900/70 transition-all cursor-pointer" onclick="simulateQrScan()">
+                        <div class="w-16 h-16 bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 rounded-2xl flex items-center justify-center mx-auto text-2xl mb-3">
+                            <i class="fa-solid fa-qrcode"></i>
+                        </div>
+                        <p class="text-xs font-bold text-slate-200" data-i18n="dragQr">QR Kod Rasmini Yuklang yoki Kamera Bilan Skan Qiling</p>
+                        <p class="text-[10px] text-slate-400 mt-1">Skanerlashni sinab ko'rish uchun bu yerga bosing</p>
+                    </div>
+
+                    <div id="qrResult" class="hidden p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-slate-400">Skan Qilingan URL:</span>
+                            <span class="font-mono text-emerald-400 font-bold">https://payme.uz/pay/official</span>
+                        </div>
+                        <p class="text-[11px] text-emerald-400 font-semibold"><i class="fa-solid fa-check"></i> QR Kod Rasmiy To'lov Tizimiga Tegishli. Xavfsiz!</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. FILEGUARD & APK SHIELD TAB -->
+        <div id="tab-fileApkGuard" class="tab-content hidden space-y-6">
+            <div class="glass-panel p-6 rounded-2xl border border-slate-800 space-y-6">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-file-shield text-emerald-400"></i> FileGuard & APK Shield
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-1">Shubhali fayllar, hujjatlar hamda Android APK dasturlarini statik xavfsizlik tahlili</p>
+                </div>
+
+                <!-- Drag Drop Area -->
+                <div class="p-10 border-2 border-dashed border-slate-700 rounded-2xl text-center bg-slate-900/50 hover:border-emerald-500 transition-all cursor-pointer" onclick="simulateFileScan()">
+                    <div class="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-2xl flex items-center justify-center mx-auto text-2xl mb-3">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                    </div>
+                    <p class="text-xs font-bold text-slate-200" data-i18n="dragFileText">Fayl yoki APK Dasturni Shu Yerga Tashlang</p>
+                    <p class="text-[10px] text-slate-400 mt-1">Qo'llab-quvvatlanadi: .apk, .pdf, .docx, .zip, .exe (Maks: 50MB)</p>
+                </div>
+
+                <!-- Simulation Result Card -->
+                <div id="fileScanResult" class="hidden glass-panel p-6 rounded-xl border border-slate-800 space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                        <div class="flex items-center space-x-3">
+                            <i class="fa-brands fa-android text-3xl text-rose-500"></i>
+                            <div>
+                                <h4 class="text-xs font-bold text-white font-mono">Telegram_Premium_Free.apk</h4>
+                                <p class="text-[10px] text-slate-400">Hajmi: 14.2 MB | Hash SHA-256: e3b0c44298fc1c149afbf4c8996fb924</p>
+                            </div>
+                        </div>
+                        <span class="bg-rose-500/20 text-rose-400 px-3 py-1 rounded-full text-xs font-extrabold">94% SHUBHALI APK</span>
+                    </div>
+
+                    <div class="space-y-2">
+                        <h5 class="text-xs font-bold text-slate-300">Aniqlangan Xavfli Ruxsatnomalar (Permissions):</h5>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+                            <div class="p-2 bg-slate-900 rounded-lg text-rose-400 border border-slate-800"><i class="fa-solid fa-ban mr-1"></i> READ_SMS (SMS larni o'qish va intercept qilish)</div>
+                            <div class="p-2 bg-slate-900 rounded-lg text-rose-400 border border-slate-800"><i class="fa-solid fa-ban mr-1"></i> BIND_ACCESSIBILITY_SERVICE (Ekran va tugmalarni yashirin boshqarish)</div>
+                            <div class="p-2 bg-slate-900 rounded-lg text-rose-400 border border-slate-800"><i class="fa-solid fa-ban mr-1"></i> SYSTEM_ALERT_WINDOW (Bank dasturlari ustiga soxta oyna chizish)</div>
+                            <div class="p-2 bg-slate-900 rounded-lg text-slate-300 border border-slate-800"><i class="fa-solid fa-check text-emerald-400 mr-1"></i> INTERNET (Tarmoqqa ulanish)</div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 bg-rose-950/30 border border-rose-500/30 rounded-xl text-xs text-rose-300">
+                        <strong>Xulosa:</strong> Ushbu APK dasturi bank SMS-kodlarini o'g'irlash uchun mo'ljallangan troyan (Spyware) ilovasiga o'xshaydi. Telefoningizga o'rnatmang!
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. VOICEGUARD (AI DEEPFAKE VERIFIER) TAB -->
+        <div id="tab-voiceGuard" class="tab-content hidden space-y-6">
+            <div class="glass-panel p-6 rounded-2xl border border-slate-800 space-y-6">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-microphone-lines text-cyan-400"></i> VoiceGuard - AI Ovoz Tahlilchisi (Deepfake Detector)
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-1">Sinfiy intellekt (AI) orqali klonlashtirilgan soxta ovoz yoki tanishingizning haqiqiy ovozini spektral tahlil qilish</p>
+                </div>
+
+                <div class="p-8 bg-slate-900/60 border border-slate-800 rounded-2xl flex flex-col items-center justify-center text-center space-y-4">
+                    <!-- Animated Spectrum Wave -->
+                    <div id="audioSpectrum" class="flex items-end space-x-1.5 h-16 w-64 justify-center">
+                        <div class="w-2 bg-cyan-500 rounded-full h-3"></div>
+                        <div class="w-2 bg-cyan-500 rounded-full h-6"></div>
+                        <div class="w-2 bg-cyan-500 rounded-full h-10"></div>
+                        <div class="w-2 bg-cyan-500 rounded-full h-4"></div>
+                        <div class="w-2 bg-cyan-500 rounded-full h-12"></div>
+                        <div class="w-2 bg-cyan-500 rounded-full h-8"></div>
+                        <div class="w-2 bg-cyan-500 rounded-full h-5"></div>
+                    </div>
+
+                    <button id="voiceRecordBtn" onclick="simulateVoiceAnalysis()" class="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-slate-950 font-extrabold text-xs shadow-lg glow-cyan transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-microphone"></i> <span>Ovozli Xabarni Sinovdan O'tkazish</span>
+                    </button>
+                    <p class="text-[10px] text-slate-400">Telegram/WhatsApp orqali kelgan shubhali ovozli xabarlarni tekshirish simulyatsiyasi</p>
+                </div>
+
+                <!-- Voice Result Box -->
+                <div id="voiceResult" class="hidden glass-panel p-6 rounded-xl border border-slate-800 space-y-3">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                        <h4 class="text-xs font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-wave-square text-cyan-400"></i> Spektral Garmonika va Sintez Tahlili Natijasi
+                        </h4>
+                        <span class="bg-rose-500/20 text-rose-400 text-xs font-black px-3 py-1 rounded-full">87% AI Kloni (Deepfake)</span>
+                    </div>
+
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Ovoz to'lqinida sun'iy akustik bo'shliqlar va garmonik chastota uzilishlari aniqlandi. Ovoz **ElevenLabs / AI Voice Synthesizer** yordamida hosil qilingan bo'lishi ehtimoli juda yuqori.
+                    </p>
+
+                    <div class="p-3 bg-amber-950/30 border border-amber-500/30 rounded-xl text-xs text-amber-300">
+                        <strong>Tavsiya:</strong> Ovozda pul yoki shoshilinch yordam so'ralgan bo'lsa, tanishingizga bevosita oddiy telefon qo'ng'irog'i qilib shaxsan gaplashing!
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 7. SOS EMERGENCY "MEN ALDANDIM" TAB -->
+        <div id="tab-sosGuard" class="tab-content hidden space-y-6">
+            <div class="glass-panel p-6 rounded-2xl border border-rose-500/30 bg-rose-950/10 space-y-6">
+                <div class="flex items-center space-x-4 border-b border-slate-800 pb-4">
+                    <div class="w-12 h-12 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-500 flex items-center justify-center text-2xl font-black animate-pulse">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-black text-rose-400" data-i18n="sosTitle">TEZKOR SOS YORDAM: "Men Aldandim!"</h3>
+                        <p class="text-xs text-slate-300" data-i18n="sosSub">Mablag'ingiz va shaxsiy ma'lumotlaringizni saqlab qolish uchun zudlik bilan 5 ta qadamni bajaring</p>
+                    </div>
+                </div>
+
+                <!-- 5 Steps Accordion/Guide -->
+                <div class="space-y-4">
+                    <!-- Step 1 -->
+                    <div class="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <h4 class="text-xs font-extrabold text-emerald-400 flex items-center gap-2">
+                                <span class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px]">1</span>
+                                1-Qadam: Kartani Zudlik Bilan Bloklang
+                            </h4>
+                            <span class="text-[10px] bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded font-bold">1-DAQIQA ICHIDA</span>
+                        </div>
+                        <p class="text-xs text-slate-300">Bank ilovangizga (Click, Payme, Uzum va h.k.) kiring va kartangizni vaqtincha bloklang. Yoki bank markaziga qo'ng'iroq qiling.</p>
+                    </div>
+
+                    <!-- Step 2 -->
+                    <div class="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2">
+                        <h4 class="text-xs font-extrabold text-cyan-400 flex items-center gap-2">
+                            <span class="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-[10px]">2</span>
+                            2-Qadam: Bank Aloqa Markaziga Xabar Bering
+                        </h4>
+                        <p class="text-xs text-slate-300">Tranzaksiya (pul o'tkazmasi) noqonuniy amalga oshirilganini aytib, operatsiyani muzlatib qo'yishni so'rang.</p>
+                    </div>
+
+                    <!-- Step 3 -->
+                    <div class="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2">
+                        <h4 class="text-xs font-extrabold text-amber-400 flex items-center gap-2">
+                            <span class="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-[10px]">3</span>
+                            3-Qadam: Telegram va Hisob Parollarini Almashtiring
+                        </h4>
+                        <p class="text-xs text-slate-300">Telegram Sozlamalari -> Qurilmalar -> "Barcha boshqa seanslarni yakunlash" tugmasini bosing va 2-bosqichli parolni yoqing.</p>
+                    </div>
+
+                    <!-- Step 4 -->
+                    <div class="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2">
+                        <h4 class="text-xs font-extrabold text-indigo-400 flex items-center gap-2">
+                            <span class="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-[10px]">4</span>
+                            4-Qadam: Barcha Dalillarni Saqlang (Screenshot)
+                        </h4>
+                        <p class="text-xs text-slate-300">Firibgarning yozishmalari, telefon raqami, havola (URL) va bank cheklarini rasmga (skrinshot) olib saqlab qo'ying.</p>
+                    </div>
+
+                    <!-- Step 5 & Complaint Template Generator -->
+                    <div class="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-3">
+                        <h4 class="text-xs font-extrabold text-rose-400 flex items-center gap-2">
+                            <span class="w-5 h-5 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center text-[10px]">5</span>
+                            5-Qadam: IIB va Kiberxavfsizlik Markaziga Rasmiy Ariza Yuborish
+                        </h4>
+                        <p class="text-xs text-slate-300">IIB Kiberxavfsizlik bo'limiga topshirish uchun tayyor ariza shablonini shakllantiring:</p>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs pt-1">
+                            <input id="sosName" type="text" placeholder="Ism va Familiyangiz" class="bg-slate-950 border border-slate-700 p-2 rounded-lg text-slate-200 focus:outline-none">
+                            <input id="sosCard" type="text" placeholder="Zarar ko'rgan karta yoki summa (so'm)" class="bg-slate-950 border border-slate-700 p-2 rounded-lg text-slate-200 focus:outline-none">
+                        </div>
+
+                        <button onclick="generatePoliceTemplate()" class="w-full py-2.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-all shadow-md flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-file-pen"></i> Ariza Matnini Avtomatik Shakllantirish
+                        </button>
+
+                        <div id="sosTemplateResult" class="hidden p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-2">
+                            <textarea id="sosTemplateText" rows="5" readonly class="w-full bg-transparent text-[11px] font-mono text-slate-300 focus:outline-none resize-none"></textarea>
+                            <button onclick="copySosTemplate()" class="px-3 py-1 bg-emerald-500 text-slate-950 font-bold text-[10px] rounded hover:bg-emerald-400 flex items-center gap-1">
+                                <i class="fa-solid fa-copy"></i> Matnni Nusxalash
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 8. CYBER ACADEMY TAB -->
+        <div id="tab-cyberAcademy" class="tab-content hidden space-y-6">
+            <div class="glass-panel p-6 rounded-2xl border border-slate-800 space-y-6">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+                    <div>
+                        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-graduation-cap text-emerald-400"></i> Cyber Academy - Kiber Savodxonlik
+                        </h3>
+                        <p class="text-xs text-slate-400 mt-1" data-i18n="academyDesc">Interaktiv testlar orqali fishing va raqamli tahdidlarni tanish odatini shakllantiring</p>
+                    </div>
+                    <div class="bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 rounded-xl text-center">
+                        <span class="text-[10px] text-slate-400 block uppercase font-bold">Mening Reytingim</span>
+                        <span class="text-emerald-400 font-extrabold text-sm" id="academyBadge">Level 1: Novice Guard</span>
+                    </div>
+                </div>
+
+                <!-- Quiz Interactive Container -->
+                <div id="quizBox" class="bg-slate-900/80 p-6 rounded-2xl border border-slate-800 space-y-4">
+                    <div class="flex items-center justify-between text-xs text-slate-400">
+                        <span>Savol <span id="quizNum">1</span> / 3</span>
+                        <span>To'plangan Ball: <strong id="quizScoreVal" class="text-emerald-400">0</strong></span>
+                    </div>
+
+                    <h4 id="quizQuestion" class="text-sm font-bold text-white"></h4>
+
+                    <div id="quizOptions" class="space-y-2 pt-2"></div>
+
+                    <div id="quizFeedback" class="hidden p-3 rounded-xl text-xs font-semibold"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 9. FAMILY & BUSINESS GUARD TAB -->
+        <div id="tab-familyBusiness" class="tab-content hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Family Guard -->
+                <div class="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-house-chimney-window text-cyan-400"></i> Family Guard
+                    </h3>
+                    <p class="text-xs text-slate-400">Oila va keksalar uchun maxsus himoya va oilaviy maxfiy parol generatori</p>
+
+                    <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-3">
+                        <h4 class="text-xs font-bold text-slate-200">Oilaviy Maxfiy So'z (Secret Word)</h4>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">AI deepfake va soxta ovozli qo'ng'iroqlarga aldanmaslik uchun yaqinlaringiz bilan sirli parolni kelishib oling.</p>
+                        
+                        <div class="flex gap-2">
+                            <input id="familySecretInput" type="text" readonly class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-cyan-400 font-bold" value="Lola-2026-Xavfsiz">
+                            <button onclick="generateSecretWord()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded-lg text-slate-200">
+                                <i class="fa-solid fa-rotate"></i> Yangilash
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Business Guard -->
+                <div class="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-briefcase text-emerald-400"></i> Business Guard
+                    </h3>
+                    <p class="text-xs text-slate-400">Kichik biznes va tashkilot xodimlari uchun kiber simulyatsiyalar</p>
+
+                    <div class="space-y-2 text-xs">
+                        <div class="p-3 bg-slate-900 rounded-xl border border-slate-800 flex items-center justify-between">
+                            <span class="text-slate-300">Xodimlar Fishing Mashqi</span>
+                            <span class="text-emerald-400 font-bold">Faol</span>
+                        </div>
+                        <div class="p-3 bg-slate-900 rounded-xl border border-slate-800 flex items-center justify-between">
+                            <span class="text-slate-300">Oylik Korporativ Hisobot</span>
+                            <span class="text-cyan-400 font-bold">Tayyor</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // --- 1. Multi-language Dictionary ---
+        const i18nData = {
+            uz_lat: {
+                tagline: "Raqamli Himoya Ekotizimi",
+                langLabel: "Tizim Tili",
+                navDashboard: "Boshqaruv Paneli",
+                navSOS: "SOS: \"Men aldandim\"",
+                navAcademy: "Cyber Academy",
+                navFamily: "Family & Business",
+                systemActive: "Tizim Ishchi Holatda",
+                headerSubtitle: "Aktiv himoya monitoringi va so'nggi tahdid tahlillari",
+                threatDbLive: "Tahdidlar Bazasi: Faol",
+                statScanned: "Jami Tekshiruvlar",
+                statBlocked: "Bloklangan Fishing",
+                statAiConf: "AI Tahlil Aniqligi",
+                statProtectedUsers: "Himoyalangan Baza",
+                quickScanTitle: "Tezkor Havola yoki Matn Tekshiruvi",
+                quickScanDesc: "Instant AI Guard",
+                btnAnalyze: "TEZKOR TAHLIL QILISH",
+                chartTitle: "Tahdid Turlari Bo'yicha Taqsimot",
+                chartSub: "Oxirgi 30 kundagi statistik tahlil",
+                recentScansTitle: "So'nggi Tekshiruvlar Tarixi",
+                urlScannerDesc: "Domen spoofing, SSL sertifikati va shubhali yo'naltirishlarni chuqur tekshirish",
+                inputUrlLabel: "Tekshiriluvchi Internet Manzili (URL)",
+                btnCheckUrl: "Tekshirish",
+                threatScore: "Xavf Balli",
+                whyUnsafe: "Nega Xavfli yoki Shubhali?",
+                safeAction: "Tavsiya Etiladigan Xavfsiz Harakat:",
+                msgGuardDesc: "Shoshiltirish, ruhiy psixologik bosim va maxfiy kod (OTP) so'rash belgilarini aniqlash",
+                msgInputLabel: "Kelgan Xabar Matnini Kiriting",
+                btnAnalyzeMsg: "Xabar Matnini AI Orqali Tahlil Qilish",
+                scamProbability: "Firibgarlik Ehtimoli",
+                cardGuardRulesDesc: "Bank kartangiz xavfsizligini ta'minlash uchun oltin qoidalar",
+                dragQr: "QR Kod Rasmini Yuklang yoki Kamera Bilan Skan Qiling",
+                dragFileText: "Fayl yoki APK Dasturni Shu Yerga Tashlang",
+                sosTitle: "TEZKOR SOS YORDAM: \"Men Aldandim!\"",
+                sosSub: "Mablag'ingiz va shaxsiy ma'lumotlaringizni saqlab qolish uchun zudlik bilan 5 ta qadamni bajaring",
+                academyDesc: "Interaktiv testlar orqali fishing va raqamli tahdidlarni tanish odatini shakllantiring"
+            },
+            uz_cyr: {
+                tagline: "Рақамли Ҳимоя Экотизими",
+                langLabel: "Тизим Тили",
+                navDashboard: "Бошқарув Панели",
+                navSOS: "SOS: \"Мен алдандим\"",
+                navAcademy: "Cyber Academy",
+                navFamily: "Family & Business",
+                systemActive: "Тизим Ишчи Ҳолатда",
+                headerSubtitle: "Акив ҳимоя мониторинги ва сўнгги таҳдид таҳлиллари",
+                threatDbLive: "Таҳдидлар Базаси: Фаол",
+                statScanned: "Жами Текширувлар",
+                statBlocked: "Блокланган Фишинг",
+                statAiConf: "AI Таҳлил Аниқлиги",
+                statProtectedUsers: "Ҳимояланган База",
+                quickScanTitle: "Тезкор Ҳавола ёки Матн Текшируви",
+                quickScanDesc: "Instant AI Guard",
+                btnAnalyze: "ТЕЗКОР ТАҲЛИЛ ҚИЛИШ",
+                chartTitle: "Таҳдид Турлари Бўйича Тақсимот",
+                chartSub: "Охирги 30 кундаги статистик таҳлил",
+                recentScansTitle: "Сўнгги Текширувлар Тарихи",
+                urlScannerDesc: "Домен spoofing, SSL сертификати ва шубҳали йўналтиришларни чуқур текшириш",
+                inputUrlLabel: "Текширилувчи Интернет Манзили (URL)",
+                btnCheckUrl: "Текшириш",
+                threatScore: "Хавф Балли",
+                whyUnsafe: "Нега Хавфли ёки Шубҳали?",
+                safeAction: "Тавсия Этиладиган Хавфсиз Ҳаракат:",
+                msgGuardDesc: "Шошилтириш, руҳий психологик босим ва махфий код (OTP) сўраш белгиларини аниқлаш",
+                msgInputLabel: "Келган Хабар Матнини Киритинг",
+                btnAnalyzeMsg: "Хабар Матнини AI Орқали Таҳлил Қилиш",
+                scamProbability: "Фирибгарлик Эҳтимоли",
+                cardGuardRulesDesc: "Банк картангиз хавфсизлигини таъминлаш учун олтин қоидалар",
+                dragQr: "QR Код Расмини Юкланг ёки Камера Билан Скан Қилинг",
+                dragFileText: "Файл ёки APK Дастурни Шу Ерга Ташланг",
+                sosTitle: "ТЕЗКОР SOS ЁРДАМ: \"Мен Алдандим!\"",
+                sosSub: "Маблағингиз ва шахсий маълумотларингизни сақлаб қолиш учун зудлик билан 5 та қадамни бажаринг",
+                academyDesc: "Интерактив тестлар орқали фишинг ва рақамли таҳдидларни таниш одатини шакллантиринг"
+            },
+            ru: {
+                tagline: "Экосистема Цифровой Защиты",
+                langLabel: "Язык Системы",
+                navDashboard: "Панель Управления",
+                navSOS: "SOS: \"Меня обманули\"",
+                navAcademy: "Cyber Academy",
+                navFamily: "Family & Business",
+                systemActive: "Система Активна",
+                headerSubtitle: "Мониторинг активной защиты и аналитика угроз",
+                threatDbLive: "База Угроз: Активна",
+                statScanned: "Всего Проверок",
+                statBlocked: "Заблокировано Фишинга",
+                statAiConf: "Точность ИИ Анализа",
+                statProtectedUsers: "Защищенная База",
+                quickScanTitle: "Быстрая Проверка Ссылки или Текста",
+                quickScanDesc: "Instant AI Guard",
+                btnAnalyze: "ПРОВЕРИТЬ СЕЙЧАС",
+                chartTitle: "Распределение по Типам Угроз",
+                chartSub: "Статистика за последние 30 дней",
+                recentScansTitle: "История Последних Проверок",
+                urlScannerDesc: "Глубокая проверка спуфинга доменов, SSL и подозрительных редиректов",
+                inputUrlLabel: "Проверяемый URL адрес",
+                btnCheckUrl: "Проверить",
+                threatScore: "Уровень Угрозы",
+                whyUnsafe: "Почему это опасно?",
+                safeAction: "Рекомендуемое безопасное действие:",
+                msgGuardDesc: "Детекция срочности, психологического давления и вымогательства СМС кодов",
+                msgInputLabel: "Введите текст сообщения",
+                btnAnalyzeMsg: "Анализировать текст через ИИ",
+                scamProbability: "Вероятность Мошенничества",
+                cardGuardRulesDesc: "Золотые правила безопасности вашей банковской карты",
+                dragQr: "Загрузите QR-код или отсканируйте камерой",
+                dragFileText: "Перетащите сюда файл или APK приложение",
+                sosTitle: "ЭКСТРЕННАЯ SOS ПОМОЩЬ: \"Меня обманули!\"",
+                sosSub: "Выполните 5 шагов прямо сейчас для защиты средств",
+                academyDesc: "Обучение распознаванию фишинга через интерактивные тесты"
+            },
+            en: {
+                tagline: "Digital Protection Suite",
+                langLabel: "System Language",
+                navDashboard: "Dashboard",
+                navSOS: "SOS: \"I was scammed\"",
+                navAcademy: "Cyber Academy",
+                navFamily: "Family & Business",
+                systemActive: "System Active",
+                headerSubtitle: "Active monitoring & live threat intelligence analysis",
+                threatDbLive: "Threat DB: Live",
+                statScanned: "Total Scans",
+                statBlocked: "Blocked Phishing",
+                statAiConf: "AI Precision",
+                statProtectedUsers: "Protected Users",
+                quickScanTitle: "Express URL & Text Scanner",
+                quickScanDesc: "Instant AI Guard",
+                btnAnalyze: "ANALYZE NOW",
+                chartTitle: "Threat Distribution Breakdown",
+                chartSub: "Analytics over last 30 days",
+                recentScansTitle: "Recent Scan Logs",
+                urlScannerDesc: "Deep inspection for domain spoofing, SSL validity, and suspicious redirects",
+                inputUrlLabel: "Target URL Address",
+                btnCheckUrl: "Scan URL",
+                threatScore: "Threat Score",
+                whyUnsafe: "Why is it unsafe?",
+                safeAction: "Recommended Safe Action:",
+                msgGuardDesc: "Detecting urgency, psychological pressure, and OTP theft attempts",
+                msgInputLabel: "Paste Received Message Text",
+                btnAnalyzeMsg: "Analyze Text via AI",
+                scamProbability: "Scam Probability",
+                cardGuardRulesDesc: "Golden rules for securing your bank cards",
+                dragQr: "Upload QR image or scan with camera",
+                dragFileText: "Drag and drop File or APK application here",
+                sosTitle: "EMERGENCY SOS: \"I was scammed!\"",
+                sosSub: "Follow these 5 vital steps immediately to salvage your assets",
+                academyDesc: "Interactive security challenges to build anti-phishing habits"
+            }
+        };
+
+        let currentLang = 'uz_lat';
+
+        function changeLanguage(lang) {
+            currentLang = lang;
+            const dict = i18nData[lang] || i18nData['uz_lat'];
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (dict[key]) el.textContent = dict[key];
+            });
+        }
+
+        // --- 2. Navigation Tabs Switcher ---
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            const target = document.getElementById('tab-' + tabId);
+            if (target) target.classList.remove('hidden');
+
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('active', 'text-emerald-400', 'bg-emerald-500/10', 'border-emerald-500/20');
+                btn.classList.add('text-slate-400');
+            });
+
+            event.currentTarget.classList.add('active', 'text-emerald-400', 'bg-emerald-500/10', 'border-emerald-500/20');
+            event.currentTarget.classList.remove('text-slate-400');
+
+            // Close sidebar on mobile after tab click
+            if (window.innerWidth < 768) {
+                document.getElementById('sidebar').classList.add('-translate-x-full');
+            }
+        }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('-translate-x-full');
+        }
+
+        // --- 3. Quick Express Scanner ---
+        function setQuickSample(txt) {
+            document.getElementById('quickInput').value = txt;
+        }
+
+        function runQuickScan() {
+            const val = document.getElementById('quickInput').value.trim();
+            const resBox = document.getElementById('quickScanResult');
+            if (!val) return;
+
+            resBox.classList.remove('hidden');
+            resBox.innerHTML = '<div class="text-xs text-cyan-400 font-bold flex items-center gap-2"><i class="fa-solid fa-spinner animate-spin"></i> AI Tahlil o\'tkazilmoqda...</div>';
+
+            setTimeout(() => {
+                const lower = val.toLowerCase();
+                if (lower.includes('payme-uz') || lower.includes('click-uz') || lower.includes('kodni yuboring') || lower.includes('bloklandi')) {
+                    resBox.className = "p-4 rounded-xl border bg-rose-950/30 border-rose-500/40 space-y-1";
+                    resBox.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-black text-rose-400"><i class="fa-solid fa-triangle-exclamation"></i> 98% YUQORI XAVF (FISHING / FIRIBGARLIK)</span>
+                            <span class="text-[10px] bg-rose-500 text-white font-bold px-2 py-0.5 rounded">BLOKLANDI</span>
+                        </div>
+                        <p class="text-xs text-slate-300">Shoshiltirish yoki rasmiy tashkilot nusxasi (spoofing) belgilari bor. Ma'lumot kiritmang!</p>
+                    `;
+                } else {
+                    resBox.className = "p-4 rounded-xl border bg-emerald-950/30 border-emerald-500/40 space-y-1";
+                    resBox.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-black text-emerald-400"><i class="fa-solid fa-circle-check"></i> XAVFSIZ MANBA (100% ISHONCHLI)</span>
+                            <span class="text-[10px] bg-emerald-500 text-slate-950 font-bold px-2 py-0.5 rounded">PASSED</span>
+                        </div>
+                        <p class="text-xs text-slate-300">Zararli yoki phishing belgilari aniqlanmadi.</p>
+                    `;
+                }
+            }, 800);
+        }
+
+        // --- 4. Detailed URL Scanner ---
+        function analyzeUrl() {
+            const url = document.getElementById('urlInput').value.trim();
+            const card = document.getElementById('urlResultCard');
+            if (!url) return;
+
+            card.classList.remove('hidden');
+            const lower = url.toLowerCase();
+
+            if (lower.includes('my.gov.uz') || lower.includes('tatu.uz')) {
+                document.getElementById('urlResultBadge').className = "px-3 py-1 rounded-full text-xs font-black uppercase bg-emerald-500/20 text-emerald-400";
+                document.getElementById('urlResultBadge').textContent = "XAVFSIZ DOMEN";
+                document.getElementById('urlResultDomain').textContent = url;
+                document.getElementById('urlResultScore').className = "text-2xl font-black text-emerald-400";
+                document.getElementById('urlResultScore').textContent = "0 / 100";
+                document.getElementById('urlResultAge').textContent = "12 Yil (Registrar: UzInfocom)";
+                document.getElementById('urlResultSsl').textContent = "Yaroqli Let's Encrypt TLS 1.3";
+                document.getElementById('urlResultDb').textContent = "Toza (Clean)";
+                document.getElementById('urlResultReason').textContent = "Ushbu domen O'zbekiston milliy .UZ hududida ro'yxatdan o'tgan rasmiy davlat yoki ta'lim portali.";
+                document.getElementById('urlResultAction').textContent = "Saytdan xavfsiz foydalanishingiz mumkin.";
+            } else {
+                document.getElementById('urlResultBadge').className = "px-3 py-1 rounded-full text-xs font-black uppercase bg-rose-500/20 text-rose-400";
+                document.getElementById('urlResultBadge').textContent = "XAVFLI FISHING DOMEN";
+                document.getElementById('urlResultDomain').textContent = url;
+                document.getElementById('urlResultScore').className = "text-2xl font-black text-rose-400";
+                document.getElementById('urlResultScore').textContent = "96 / 100";
+                document.getElementById('urlResultAge').textContent = "Yangi Yaratilgan (2 kun avval)";
+                document.getElementById('urlResultSsl').textContent = "Shubhali Bevaqt Sertifikat";
+                document.getElementById('urlResultDb').textContent = "PhishGuard Threat Intelligence da qayd etilgan";
+                document.getElementById('urlResultReason').textContent = "Domen nomi rasmiy to'lov tizimiga (Payme/Click) o'xshatib qalbakilashtirilgan (Typosquatting/Spoofing).";
+                document.getElementById('urlResultAction').textContent = "Domen sahifasini darhol yoping va SMS kod yoki karta ma'lumotlarini aslo kiritmang!";
+            }
+        }
+
+        // --- 5. MessageGuard Analyzer ---
+        function analyzeMessage() {
+            const msg = document.getElementById('msgInput').value.trim();
+            const card = document.getElementById('msgResultCard');
+            if (!msg) return;
+
+            card.classList.remove('hidden');
+            const triggersBox = document.getElementById('msgTriggers');
+            triggersBox.innerHTML = '';
+
+            document.getElementById('msgRiskBadge').className = "px-3 py-1 rounded-full text-xs font-black uppercase bg-rose-500/20 text-rose-400";
+            document.getElementById('msgRiskBadge').textContent = "YUKORI SHUBHALI FIRIBGARLIK";
+            document.getElementById('msgRiskPercent').className = "text-2xl font-black text-rose-400";
+            document.getElementById('msgRiskPercent').textContent = "95%";
+
+            triggersBox.innerHTML += `<span class="px-2 py-1 bg-rose-950 text-rose-400 border border-rose-800 rounded text-[10px] font-bold">⚠️ Shoshiltirish (Urgency)</span>`;
+            triggersBox.innerHTML += `<span class="px-2 py-1 bg-rose-950 text-rose-400 border border-rose-800 rounded text-[10px] font-bold">🔑 SMS-Kod So'rash (OTP Theft)</span>`;
+            triggersBox.innerHTML += `<span class="px-2 py-1 bg-rose-950 text-rose-400 border border-rose-800 rounded text-[10px] font-bold">🏛️ Bank Nomidan Soxta Murojaat</span>`;
+
+            document.getElementById('msgExplanation').textContent = "Xabarda foydalanuvchini qo'rqitish ('Plastik kartangiz bloklandi') hamda tezkor xatolikka majbur qilish usuli qo'llanilgan. Bank xodimlari SMS tasdiqlash kodini hech qachon telefon orqali so'ramaydi.";
+            document.getElementById('msgAdvice').textContent = "Xabarga javob bermang, havolalarga bosmang va yuboruvchining raqamini bloklang.";
+        }
+
+        // --- 6. Simulators (QR, File, Voice) ---
+        function simulateQrScan() {
+            document.getElementById('qrResult').classList.remove('hidden');
+        }
+
+        function simulateFileScan() {
+            document.getElementById('fileScanResult').classList.remove('hidden');
+        }
+
+        function simulateVoiceAnalysis() {
+            const result = document.getElementById('voiceResult');
+            result.classList.remove('hidden');
+        }
+
+        // --- 7. SOS Police Complaint Generator ---
+        function generatePoliceTemplate() {
+            const name = document.getElementById('sosName').value.trim() || "Foydalanuvchi";
+            const card = document.getElementById('sosCard').value.trim() || "500 000 so'm";
+            const txtBox = document.getElementById('sosTemplateText');
+            
+            txtBox.value = `O'zbekiston Respublikasi Ichki Ishlar Vazirligi Kiberxavfsizlik Markaziga\n` +
+                `Fuqaro: ${name}\n\n` +
+                `ARIZA\n` +
+                `Shuni ma'lum qilamanki, men noaniq shaxslar tomonidan ijtimoiy muhandislik usullari va fishing havolasi orqali aldanib, ${card} miqdorida moddiy zarar ko'rdim.\n` +
+                `Iltimos, ushbu holat bo'yicha surishtiruv o'tkazib, firibgar shaxsning bank rekvizitlarini bloklashingizni va qonuniy chora ko'rishingizni so'rayman.\n\n` +
+                `Sana: 2026-10-20\nPhishGuard SOS Tizimi Orqali Yaratildi.`;
+
+            document.getElementById('sosTemplateResult').classList.remove('hidden');
+        }
+
+        function copySosTemplate() {
+            const txt = document.getElementById('sosTemplateText');
+            txt.select();
+            document.execCommand('copy');
+            alert('Ariza matni nusxalandi! IIB ariza portaliga joylashingiz mumkin.');
+        }
+
+        // --- 8. Cyber Academy Quiz Engine ---
+        const quizData = [
+            {
+                q: "Telegram orqali do'stingiz 'Menga ovoz ber, 100$, konkursda qatnashyapman' deb havola yubordi. Nima qilasiz?",
+                options: [
+                    "Havolaga kirib, telefon raqam va kodni kiritaman",
+                    "Do'stimga boshqa aloqa kanali orqali qo'ng'iroq qilib, akkaunti o'g'irlanmaganini tekshiraman",
+                    "Darhol kartam ma'lumotlarini kiritaman"
+                ],
+                correct: 1
+            },
+            {
+                q: "Bank xodimi deb o'zini tanishtirgan shaxs kartangizga kelgan 6 xonali SMS kodni so'ramoqda. Bu kim?",
+                options: [
+                    "Haqiqiy bank xodimi, unga kodni aytish kerak",
+                    "Firibgar (Scammer), SMS kodni hech kimga aytmaslik kerak!",
+                    "Kompyuter ustasi"
+                ],
+                correct: 1
+            }
+        ];
+
+        let quizIdx = 0;
+        let quizScore = 0;
+
+        function loadQuiz() {
+            if (quizIdx >= quizData.length) {
+                document.getElementById('quizBox').innerHTML = `
+                    <div class="text-center py-6 space-y-3">
+                        <i class="fa-solid fa-award text-5xl text-emerald-400"></i>
+                        <h4 class="text-lg font-bold text-white">Tabriklaymiz! Test Yakunlandi</h4>
+                        <p class="text-xs text-slate-300">Sizning kiber savodxonlik ballingiz: <strong>${quizScore} ball</strong>. Siz 'Cyber Guard Pro' darajasidasiz!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const cur = quizData[quizIdx];
+            document.getElementById('quizNum').textContent = quizIdx + 1;
+            document.getElementById('quizQuestion').textContent = cur.q;
+
+            const optBox = document.getElementById('quizOptions');
+            optBox.innerHTML = '';
+
+            cur.options.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = "w-full text-left p-3 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs text-slate-200 transition-all";
+                btn.textContent = (idx + 1) + ") " + opt;
+                btn.onclick = () => answerQuiz(idx);
+                optBox.appendChild(btn);
+            });
+        }
+
+        function answerQuiz(idx) {
+            const cur = quizData[quizIdx];
+            const fb = document.getElementById('quizFeedback');
+            fb.classList.remove('hidden');
+
+            if (idx === cur.correct) {
+                quizScore += 50;
+                document.getElementById('quizScoreVal').textContent = quizScore;
+                fb.className = "p-3 rounded-xl text-xs font-semibold bg-emerald-950/60 text-emerald-400 border border-emerald-500/30";
+                fb.textContent = "To'g'ri javob! +50 ball";
+            } else {
+                fb.className = "p-3 rounded-xl text-xs font-semibold bg-rose-950/60 text-rose-400 border border-rose-500/30";
+                fb.textContent = "Noto'g'ri javob! Ehtiyot bo'ling.";
+            }
+
+            setTimeout(() => {
+                fb.classList.add('hidden');
+                quizIdx++;
+                loadQuiz();
+            }, 1200);
+        }
+
+        function generateSecretWord() {
+            const words = ["Qal'a-2026", "Toshkent-Xavfsiz", "Kiber-Himoya", "Lola-8899"];
+            const rand = words[Math.floor(Math.random() * words.length)];
+            document.getElementById('familySecretInput').value = rand;
+        }
+
+        // --- 9. Chart Initialization ---
+        window.addEventListener('DOMContentLoaded', () => {
+            loadQuiz();
+
+            const ctx = document.getElementById('threatChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Phishing URL', 'SMS Scam', 'APK Troyan', 'AI Voice'],
+                    datasets: [{
+                        data: [45, 30, 15, 10],
+                        backgroundColor: ['#ef4444', '#f59e0b', '#10b981', '#06b6d4'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#94a3b8', font: { size: 10 } }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
