@@ -167,7 +167,7 @@ code{word-break:break-all;font-size:12px;color:var(--ac);background:rgba(0,0,0,0
 nav{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;gap:4px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:rgba(11,16,32,0.85);backdrop-filter:blur(20px);border-top:1px solid var(--bd);z-index:100}
 nav button{flex:1;max-width:90px;background:none;border:0;color:var(--mu);font:inherit;font-size:11px;padding:6px 4px;border-radius:12px;cursor:pointer;transition:0.2s}nav button i{display:block;font-size:18px;font-style:normal;margin-bottom:2px}nav button.on{color:var(--ac);background:rgba(94,234,212,0.1)}
 .step{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--bd)}.step input{width:22px;height:22px;accent-color:var(--ac);margin-top:3px}.step.d{opacity:.5}.step.d b{text-decoration:line-through}
-.opt{display:block;width:100%;text-align:left;margin:8px 0;padding:14px;border-radius:14px;border:1px solid var(--bd);background:transparent;color:var(--tx);font:inherit;cursor:pointer;transition:0.2s}.opt:hover{border-color:var(--ac)}.opt.ok{border-color:var(--low);background:rgba(52,211,153,0.15)}.opt.no{border-color:var(--high);background:rgba(248,113,113,0.15)}
+.opt{display:block;width:100%    ;text-align:left;margin:8px 0;padding:14px;border-radius:14px;border:1px solid var(--bd);background:transparent;color:var(--tx);font:inherit;cursor:pointer;transition:0.2s}.opt:hover{border-color:var(--ac)}.opt.ok{border-color:var(--low);background:rgba(52,211,153,0.15)}.opt.no{border-color:var(--high);background:rgba(248,113,113,0.15)}
 .h{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--bd)}.pill{font-size:12px;padding:3px 12px;border-radius:99px;background:var(--c);color:#04201c;font-weight:700;--c:var(--low)}
 .news-item{background:rgba(255,255,255,0.03);border:1px solid var(--bd);border-radius:16px;padding:16px;margin:12px 0}.news-date{font-size:12px;color:var(--ac);margin-bottom:4px}.news-title{font-size:16px;font-weight:700;color:var(--tx);margin-bottom:6px}
 </style></head><body>
@@ -413,7 +413,6 @@ $("#cmp").onclick=()=>{
     t.value=`Hurmatli bank xodimlari!\n\n${new Date().toLocaleString("uz")} da men kiberfiribgarlik qurboni bo'ldim. Tarmoq va tranzaksiya ma'lumotlarini tekshirishingizni so'rayman.`;
 };
 
-// Yangilangan qiziqarli kiberxavfsizlik va IT savollari
 const Q=[
     ["Telegram'da tanishingiz ovozi bilan kelgan audioxabarda zudlik bilan pul o'tkazishni so'rashmoqda. Nima qilasiz?", ["Darhol pul o'tkazaman, chunki ovozi o'ziniki","Boshqa aloqa kanali orqali unga o'zim qo'ng'iroq qilib tasdiqlayman","Hech narsa qilmayman, e'tibor bermayman"], 1, "Sun'iy intellekt (Deepfake) yordamida yaqinlaringiz ovozini soxtalashtirishlari mumkin. Har doim boshqa aloqa orqali tekshiring."],
     ["Sayt manzili: https://click.uz.security-update.xyz. Bu manzil haqiqiy Click saytimi?", ["Ha, chunki boshida click.uz yozilgan","Yo'q, bu soxta fishing domen (asosiy domen oxirgi ikki qismda bo'ladi)","Ha, xavfsizlik yangilanishi sahifasi"], 1, "Firibgarlar taniqli brend nomini domen boshiga yozib, haqiqiy kabi ko'rsatishga harakat qilishadi."],
@@ -510,7 +509,6 @@ def index(): return Response(HTML, mimetype="text/html")
 @app.get("/manifest.json")
 def manifest(): return Response(json.dumps({"name": "PhishGuard", "short_name": "PhishGuard", "start_url": "/", "display": "standalone", "background_color": "#0b1020", "theme_color": "#0b1020"}), mimetype="application/manifest+json")
 
-@app.icon if hasattr(app, 'icon') else None
 @app.get("/icon.svg")
 def icon(): return Response('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="#5eead4"/></svg>', mimetype="image/svg+xml")
 
