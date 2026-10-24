@@ -1,5 +1,5 @@
 """PhishGuard — Kiberxavfsizlik, IT yangiliklar va AI yordamchi ilovasi (Flask + SQLite). Ishga tushirish: python app.py"""
-import hashlib, io, json, os, re, time, random, urllib.request, zipfile
+import hashlib, io, json, os, re, time, urllib.request, zipfile
 from collections import defaultdict, deque
 from urllib.parse import urlparse
 from flask import Flask, Response, jsonify, request, send_from_directory
@@ -151,7 +151,7 @@ HTML = r'''<!doctype html><html lang="uz"><head><meta charset="utf-8"><meta name
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(900px 500px at 80% -10%,#312e8144,transparent),radial-gradient(700px 400px at -10% 10%,#0d948844,transparent),var(--bg);color:var(--tx);font:15px/1.5 Inter,system-ui,sans-serif;min-height:100vh;padding-bottom:90px}
 header{padding:16px 20px;max-width:760px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:14px;border-bottom:1px solid var(--bd);background:rgba(11,16,32,0.85);backdrop-filter:blur(10px);position:sticky;top:0;z-index:50}
 .brand{display:flex;align-items:center;gap:12px}header img{width:38px;height:38px;border-radius:12px;box-shadow:0 0 15px rgba(94,234,212,0.3)}header b{font-size:18px;letter-spacing:-0.5px}header span{color:var(--mu);font-size:11px;display:block}
-.rand-btn{background:rgba(94,234,212,0.1);border:1px solid var(--ac);color:var(--ac);padding:6px 12px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;transition:0.2s}.rand-btn:hover{background:var(--ac);color:#06121f}
+.lang-select{background:rgba(94,234,212,0.1);border:1px solid var(--ac);color:var(--ac);padding:6px 12px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;outline:none;transition:0.2s}.lang-select option{background:#0b1020;color:var(--tx)}
 main{max-width:760px;margin:auto;padding:16px}section[hidden]{display:none}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:20px;padding:20px;margin:14px 0;backdrop-filter:blur(16px);box-shadow:0 8px 32px rgba(0,0,0,0.3)}
 h2{margin:6px 0 6px;font-size:22px;letter-spacing:-0.5px}h3{margin:0 0 10px;font-size:16px}p{margin:6px 0;color:var(--mu)}
@@ -176,7 +176,13 @@ nav button{flex:1;max-width:90px;background:none;border:0;color:var(--mu);font:i
     <img src="/icon.svg" alt="">
     <div><b>PhishGuard</b><span id="sub-title">IT, Tarmoqlar & Kiberxavfsizlik</span></div>
   </div>
-  <button class="rand-btn" id="randLangBtn" title="Tasodifiy tilga o'zgartirish">🎲 Random Til</button>
+  <select class="lang-select" id="langSelect">
+    <option value="uz">🇺🇿 O'zbek</option>
+    <option value="kr">🇺🇿 Ўзбек</option>
+    <option value="ru">🇷🇺 Русский</option>
+    <option value="en">🇬🇧 English</option>
+    <option value="tr">🇹🇷 Türkçe</option>
+  </select>
 </header>
 <main>
 <section id="home">
@@ -215,32 +221,24 @@ const post=(p,b)=>fetch(p,{method:"POST",headers:{"Content-Type":"application/js
 
 let curMode="url", lang=ls("lang","uz");
 
-// Random til o'zgartirish funksiyasi
-const LANGUAGES = ["uz", "kr", "ru", "en"];
-const LANG_NAMES = {uz: "O'zbek", kr: "Ўзбек", ru: "Русский", en: "English"};
 const SUB_TITLES = {
     uz: "IT, Tarmoqlar & Kiberxavfsizlik",
     kr: "ИТ, Тармоқлар ва Киберхавфсизлик",
     ru: "ИТ, Сети и Кибербезопасность",
-    en: "IT, Networks & Cybersecurity"
+    en: "IT, Networks & Cybersecurity",
+    tr: "BT, Ağlar ve Siber Güvenlik"
 };
 
-$("#randLangBtn").onclick = () => {
-    const currentIdx = LANGUAGES.indexOf(lang);
-    let nextIdx;
-    do {
-        nextIdx = Math.floor(Math.random() * LANGUAGES.length);
-    } while (nextIdx === currentIdx && LANGUAGES.length > 1);
-    
-    lang = LANGUAGES[nextIdx];
-    sv("lang", lang);
-    $("#randLangBtn.textContent = `🎲 ${LANG_NAMES[lang]}`;
-    $("#sub-title").textContent = SUB_TITLES[lang];
-    
-    // Xabarni ko'rsatish
-    alert(`Til tasodifiy ravishda o'zgartirildi: ${LANG_NAMES[lang]}`);
-    location.reload();
-};
+const langSelect = $("#langSelect");
+if(langSelect){
+    langSelect.value = lang;
+    langSelect.onchange = () => {
+        lang = langSelect.value;
+        sv("lang", lang);
+        $("#sub-title").textContent = SUB_TITLES[lang] || SUB_TITLES["uz"];
+        location.reload();
+    };
+}
 
 function show(id){
     $$("main>section").forEach(s=>s.hidden=(s.id!==id));
@@ -415,11 +413,15 @@ $("#cmp").onclick=()=>{
     t.value=`Hurmatli bank xodimlari!\n\n${new Date().toLocaleString("uz")} da men kiberfiribgarlik qurboni bo'ldim. Tarmoq va tranzaksiya ma'lumotlarini tekshirishingizni so'rayman.`;
 };
 
+// Yangilangan qiziqarli kiberxavfsizlik va IT savollari
 const Q=[
-    ["TCP/IP modelining transport qatlamida qaysi protokollar ishlaydi?",["IP va ARP","TCP va UDP","HTTP va FTP","DNS va DHCP"],1,"TCP va UDP transport qatlamida ma'lumotlar uzatilishini ta'minlaydi."],
-    ["Kiberxavfsizlikda 'Phishing' nima?",["Dasturlash tili","Tarmoq kabeli turi","Soxta havolalar orqali shaxsiy ma'lumotlarni o'g'irlash","Antivirus dasturi"],2,"Phishing — foydalanuvchini aldab maxfiy ma'lumotlarini olish usuli."],
-    ["Python dasturlash tilida o'zgaruvchi yaratish uchun nima ishlatiladi?",["var a = 5","int a = 5","a = 5","define a 5"],2,"Python'da o'zgaruvchilar to'g'ridan-to'g'ri qiymat berish orqali ochiladi."]
+    ["Telegram'da tanishingiz ovozi bilan kelgan audioxabarda zudlik bilan pul o'tkazishni so'rashmoqda. Nima qilasiz?", ["Darhol pul o'tkazaman, chunki ovozi o'ziniki","Boshqa aloqa kanali orqali unga o'zim qo'ng'iroq qilib tasdiqlayman","Hech narsa qilmayman, e'tibor bermayman"], 1, "Sun'iy intellekt (Deepfake) yordamida yaqinlaringiz ovozini soxtalashtirishlari mumkin. Har doim boshqa aloqa orqali tekshiring."],
+    ["Sayt manzili: https://click.uz.security-update.xyz. Bu manzil haqiqiy Click saytimi?", ["Ha, chunki boshida click.uz yozilgan","Yo'q, bu soxta fishing domen (asosiy domen oxirgi ikki qismda bo'ladi)","Ha, xavfsizlik yangilanishi sahifasi"], 1, "Firibgarlar taniqli brend nomini domen boshiga yozib, haqiqiy kabi ko'rsatishga harakat qilishadi."],
+    ["Notanish APK fayl 'SMS o'qish' va 'Bildirishnoma nazorati' huquqini so'ramoqda. Bu nimani anglatadi?", ["Oddiy dasturiy talab","Bank SMS kodlarini o'g'irlaydigan troyan (virus) ehtimoli yuqori","Fayl hajmini optimallashtirish uchun"], 1, "SMS o'qish ruxsati firibgarlarga bankdan keladigan tasdiq kodlarini qo'lga kiritish imkonini beradi."],
+    ["TCP/IP modelining transport qatlamida qaysi protokollar ishlaydi?", ["IP va ARP","TCP va UDP","HTTP va FTP","DNS va DHCP"], 1, "TCP va UDP tarmoqda ma'lumotlar ishonchli yoki tezkor uzatilishini ta'minlovchi transport qatlam protokollaridir."],
+    ["Jamoat joyidagi (cafe) ochiq Wi-Fi tarmog'iga ulanib bank ilovasidan foydalanishning xavfi nimada?", ["Hech qanday xavfi yo'q","Trafigingizni 'Man-in-the-Middle' (o'rtadagi odam) hujumi orqali ushlab qolishlari mumkin","Internet tezligi pasayib ketadi"], 1, "Ochiq tarmoqlarda shifrlanmagan ma'lumotlar tajovuzkorlar tomonidan o'qib olinishi mumkin."]
 ];
+
 let qi=0,qs=0;
 function quiz(){ qi=0; qs=0; qn(); }
 function qn(){
@@ -467,13 +469,13 @@ mode("url"); show("home");
 </body></html>
 '''
 
-LANGS = {"uz": " Javob tili: o'zbek.", "kr": " Javob tili: o'zbek (kirill).", "ru": " Язык ответа: русский.", "en": " Reply in English."}
+LANGS = {"uz": " Javob tili: o'zbek.", "kr": " Javob tili: o'zbek (kirill).", "ru": " Язык ответа: русский.", "en": " Reply in English.", "tr": " Türkçe yanıt ver."}
 SYS = "Sen PhishGuard kiberxavfsizlik, dasturlash va kompyuter tarmoqlari bo'yicha mutaxassis va yordamchisan. Qisqa, professional va aniq maslahat ber."
 
 @app.post("/api/ai")
 def api_ai():
     key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key: return jsonify(error="AI yoqilmagan: ANTHROPIC_API_KEY o'rnatilmagan."), 503
+    if not key: return jsonify(error="AI yo'qilmagan: ANTHROPIC_API_KEY o'rnatilmagan."), 503
     j = request.get_json(silent=True) or {}
     msg = f"Tahlil natijasi: {json.dumps(j.get('result'), ensure_ascii=False)}\nMatn: {j.get('text', '')}"
     body = json.dumps({"model": os.environ.get("AI_MODEL", "claude-sonnet-5-5"), "max_tokens": 400, "system": SYS + LANGS.get(j.get("lang"), ""), "messages": [{"role": "user", "content": msg}]}).encode()
@@ -486,7 +488,7 @@ def api_ai():
 @app.post("/api/chat")
 def api_chat():
     key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key: return jsonify(error="AI yoqilmagan: ANTHROPIC_API_KEY o'rnatilmagan."), 503
+    if not key: return jsonify(error="AI yo'qilmagan: ANTHROPIC_API_KEY o'rnatilmagan."), 503
     j = request.get_json(silent=True) or {}; ms = []
     for m in (j.get("messages") or [])[-10:]:
         if isinstance(m, dict) and m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str):
@@ -508,6 +510,7 @@ def index(): return Response(HTML, mimetype="text/html")
 @app.get("/manifest.json")
 def manifest(): return Response(json.dumps({"name": "PhishGuard", "short_name": "PhishGuard", "start_url": "/", "display": "standalone", "background_color": "#0b1020", "theme_color": "#0b1020"}), mimetype="application/manifest+json")
 
+@app.icon if hasattr(app, 'icon') else None
 @app.get("/icon.svg")
 def icon(): return Response('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="#5eead4"/></svg>', mimetype="image/svg+xml")
 
