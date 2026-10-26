@@ -1,10 +1,14 @@
 """PhishGuard — Kiberxavfsizlik, IT yangiliklar va AI yordamchi ilovasi (Flask + SQLite). Ishga tushirish: python app.py"""
-import hashlib, io, json, os, re, time, urllib.request, zipfile
+import asyncio, hashlib, io, json, os, re, threading, time, urllib.request, zipfile
 from collections import defaultdict, deque
 from urllib.parse import urlparse
 from flask import Flask, Response, jsonify, request, send_from_directory
+from flask_sock import Sock
+from google import genai
+from google.genai import types as gt
 
 app = Flask(__name__)
+sock = Sock(app)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
 
 LV = {"low": "Past xavf", "mid": "O'rta xavf", "high": "Yuqori xavf"}
@@ -241,6 +245,7 @@ if(langSelect){
 }
 
 function show(id){
+    stopLive();
     $$("main>section").forEach(s=>s.hidden=(s.id!==id));
     $$("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===id));
     if(id==="home") stats();
@@ -272,7 +277,7 @@ $("#tabs").innerHTML=Object.keys(M).map(k=>`<button data-m="${k}">${M[k][0].spli
 $$("#tabs button").forEach(b=>b.onclick=()=>mode(b.dataset.m));
 
 function mode(m){
-    curMode=m;
+    curMode=m; stopLive();
     $$("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.m===m));
     $("#ct").textContent=M[m][0]; $("#out").innerHTML="";
     if(m==="file") {
@@ -294,9 +299,11 @@ function mode(m){
 
 let CH=[];
 function chatUI(){
-    $("#inp").innerHTML=`<div id="cl" style="max-height:300px;overflow-y:auto;margin-bottom:12px"></div><textarea id="ci" placeholder="${M.chat[1]}"></textarea><button class="btn" id="cb">Yuborish</button>`;
+    $("#inp").innerHTML=`<div id="cl" style="max-height:300px;overflow-y:auto;margin-bottom:12px"></div><textarea id="ci" placeholder="${M.chat[1]}"></textarea><button class="btn" id="cb">Yuborish</button> <button class="btn g" id="lv">🎙 Jonli suhbat</button><p id="lst" style="font-size:13px"></p>`;
     drawChat();
     $("#cb").onclick=()=>sendChat($("#ci").value);
+    $("#lv").onclick=toggleLive;
+    if(LV) $("#lv").textContent="⏹ To'xtatish";
 }
 function drawChat(){
     const l=$("#cl"); if(!l) return;
@@ -314,6 +321,80 @@ async function sendChat(t){
         CH[CH.length-1].content = "Server bilan aloqa yo'q.";
     }
     drawChat();
+}
+
+// ====== Jonli ovozli suhbat (Gemini Live) ======
+let LV=null;
+const WORKLET=`class P extends AudioWorkletProcessor{constructor(){super();this.o=[];this.a=0;this.n=0;this.t=0}process(i){const c=i[0][0];if(!c)return true;const r=sampleRate/16000;for(let k=0;k<c.length;k++){this.a+=c[k];this.n++;this.t++;if(this.t>=r){this.o.push(this.a/this.n);this.a=0;this.n=0;this.t-=r}}if(this.o.length>=1600){const f=new Int16Array(this.o.length);for(let k=0;k<f.length;k++){const s=Math.max(-1,Math.min(1,this.o[k]));f[k]=s<0?s*32768:s*32767}this.port.postMessage(f.buffer,[f.buffer]);this.o=[]}return true}}registerProcessor("pcm16",P)`;
+const setLst=t=>{const e=$("#lst"); if(e) e.textContent=t};
+
+async function toggleLive(){ if(LV) stopLive(); else await startLive(); }
+
+async function startLive(){
+    if(!navigator.mediaDevices||!window.AudioWorklet) return setLst("Mikrofon faqat HTTPS yoki localhost'da, zamonaviy brauzerda ishlaydi.");
+    setLst("Ulanmoqda…");
+    let stream, inCtx, outCtx;
+    try{
+        stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+        inCtx=new AudioContext(); outCtx=new AudioContext({sampleRate:24000});
+        await inCtx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET],{type:"text/javascript"})));
+    }catch{
+        if(stream) stream.getTracks().forEach(t=>t.stop());
+        return setLst("Mikrofonga ruxsat berilmadi.");
+    }
+    const ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host+"/ws/live?lang="+encodeURIComponent(lang));
+    ws.binaryType="arraybuffer";
+    LV={ws,stream,inCtx,outCtx,next:0,src:[],u:null,a:null};
+    $("#lv").textContent="⏹ To'xtatish";
+
+    ws.onopen=()=>{
+        const node=new AudioWorkletNode(inCtx,"pcm16"), mute=inCtx.createGain(); mute.gain.value=0;
+        node.port.onmessage=e=>{ if(ws.readyState===1) ws.send(e.data) };
+        inCtx.createMediaStreamSource(stream).connect(node); node.connect(mute); mute.connect(inCtx.destination);
+    };
+    ws.onmessage=e=>{
+        if(!LV||LV.ws!==ws) return;
+        if(typeof e.data!=="string") return playPcm(e.data);
+        const m=JSON.parse(e.data);
+        if(m.type==="ready") setLst("🎙 Gapiring… (quloqchin taqsangiz yaxshiroq)");
+        else if(m.type==="in") liveText("user",m.text);
+        else if(m.type==="out") liveText("assistant",m.text);
+        else if(m.type==="turn"){ LV.u=LV.a=null; }
+        else if(m.type==="interrupted") flushPlay();
+        else if(m.type==="error"){ stopLive(); setLst(m.text); }
+    };
+    ws.onclose=()=>{ if(LV&&LV.ws===ws){ stopLive(); setLst("Suhbat tugadi."); } };
+    ws.onerror=()=>{ if(LV&&LV.ws===ws){ stopLive(); setLst("Serverga ulanib bo'lmadi."); } };
+}
+
+function liveText(role,t){
+    const k=role==="user"?"u":"a", o=role==="user"?"a":"u";
+    LV[o]=null;
+    if(!LV[k]){ LV[k]={role,content:""}; CH.push(LV[k]); }
+    LV[k].content+=t; drawChat();
+}
+
+function playPcm(buf){
+    const i16=new Int16Array(buf,0,buf.byteLength>>1), f=new Float32Array(i16.length);
+    for(let k=0;k<i16.length;k++) f[k]=i16[k]/32768;
+    const ab=LV.outCtx.createBuffer(1,f.length,24000); ab.copyToChannel(f,0);
+    const s=LV.outCtx.createBufferSource(); s.buffer=ab; s.connect(LV.outCtx.destination);
+    const t=Math.max(LV.outCtx.currentTime+0.02,LV.next); s.start(t); LV.next=t+ab.duration;
+    LV.src.push(s); s.onended=()=>{ if(LV) LV.src=LV.src.filter(x=>x!==s) };
+}
+
+function flushPlay(){
+    LV.src.forEach(s=>{try{s.stop()}catch{}}); LV.src=[]; LV.next=0;
+}
+
+function stopLive(){
+    if(!LV) return;
+    const v=LV; LV=null;
+    try{v.ws.close()}catch{}
+    v.stream.getTracks().forEach(t=>t.stop());
+    v.inCtx.close().catch(()=>{}); v.outCtx.close().catch(()=>{});
+    const b=$("#lv"); if(b) b.textContent="🎙 Jonli suhbat";
+    setLst("");
 }
 
 async function loadNews(){
@@ -471,12 +552,118 @@ mode("url"); show("home");
 LANGS = {"uz": " Javob tili: o'zbek.", "kr": " Javob tili: o'zbek (kirill).", "ru": " Язык ответа: русский.", "en": " Reply in English.", "tr": " Türkçe yanıt ver."}
 SYS = "Sen PhishGuard kiberxavfsizlik, dasturlash va kompyuter tarmoqlari bo'yicha mutaxassis va yordamchisan. Qisqa, professional va aniq maslahat ber."
 
+# ====== Gemini (google-genai) ======
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")        # matnli chat uchun
+LIVE_MODEL = os.environ.get("GEMINI_LIVE_MODEL", "gemini-3.8-live")      # jonli ovozli suhbat uchun
+LIVE_VOICE = os.environ.get("GEMINI_VOICE", "Kore")
+gclient = genai.Client(api_key=GEMINI_KEY) if GEMINI_KEY else None
+
+def use_gemini():
+    """GEMINI_API_KEY bor va (AI_PROVIDER=gemini yoki Anthropic kaliti yo'q) bo'lsa Gemini ishlatiladi."""
+    return bool(gclient) and (os.environ.get("AI_PROVIDER") == "gemini" or not os.environ.get("ANTHROPIC_API_KEY"))
+
+def gemini_text(system, messages):
+    # max_output_tokens ataylab berilmagan: fikrlash tokenlari ham shu limitga kiradi va javob kesilib qolishi mumkin
+    contents = [gt.Content(role="model" if m["role"] == "assistant" else "user", parts=[gt.Part(text=m["content"])]) for m in messages]
+    r = gclient.models.generate_content(model=GEMINI_MODEL, contents=contents, config=gt.GenerateContentConfig(system_instruction=system))
+    return (r.text or "").strip()
+
+# --- Jonli ovozli suhbat: brauzer <-> Flask WebSocket <-> Gemini Live API ---
+LIVE_MAX = int(os.environ.get("LIVE_MAX", 3))              # bir vaqtda nechta suhbat
+LIVE_SECONDS = int(os.environ.get("LIVE_SECONDS", 600))    # bitta suhbat davomiyligi (soniya)
+LIVE_ACTIVE, LIVE_LOCK, LIVE_HITS = 0, threading.Lock(), defaultdict(deque)
+
+def live_allowed(ip):
+    now = time.time(); q = LIVE_HITS[ip]
+    while q and now - q[0] > 600: q.popleft()
+    if len(q) >= 6: return False        # bitta IP: 10 daqiqada 6 ta suhbat
+    q.append(now); return True
+
+async def live_bridge(ws, lang):
+    loop = asyncio.get_running_loop()
+    cfg = gt.LiveConnectConfig(
+        response_modalities=["AUDIO"],
+        system_instruction=SYS + " Bu ovozli suhbat: qisqa, tabiiy va aniq gapir." + LANGS.get(lang, ""),
+        input_audio_transcription=gt.AudioTranscriptionConfig(),
+        output_audio_transcription=gt.AudioTranscriptionConfig(),
+        speech_config=gt.SpeechConfig(voice_config=gt.VoiceConfig(prebuilt_voice_config=gt.PrebuiltVoiceConfig(voice_name=LIVE_VOICE))),
+    )
+    def send(d): ws.send(d if isinstance(d, (bytes, str)) else json.dumps(d, ensure_ascii=False))
+
+    async with gclient.aio.live.connect(model=LIVE_MODEL, config=cfg) as session:
+        send({"type": "ready"})
+
+        async def up():      # brauzer -> Gemini
+            while True:
+                try: m = await loop.run_in_executor(None, ws.receive)
+                except Exception: return                       # brauzer uzildi
+                if isinstance(m, bytes):
+                    if len(m) <= 64000:
+                        await session.send_realtime_input(audio=gt.Blob(data=m, mime_type="audio/pcm;rate=16000"))
+                elif isinstance(m, str):
+                    try: j = json.loads(m)
+                    except Exception: continue
+                    if j.get("type") == "text" and str(j.get("text", "")).strip():
+                        await session.send_realtime_input(text=str(j["text"])[:1000])
+                    elif j.get("type") == "end":
+                        await session.send_realtime_input(audio_stream_end=True)
+
+        async def down():    # Gemini -> brauzer
+            while True:
+                got = False
+                async for r in session.receive():              # receive() har bir navbat (turn) oxirida tugaydi
+                    got = True
+                    sc = r.server_content
+                    if not sc: continue
+                    if sc.interrupted: send({"type": "interrupted"})
+                    if sc.model_turn:
+                        for p in sc.model_turn.parts or []:
+                            if p.inline_data and p.inline_data.data: send(p.inline_data.data)   # 24 kHz PCM16
+                    if sc.input_transcription and sc.input_transcription.text: send({"type": "in", "text": sc.input_transcription.text})
+                    if sc.output_transcription and sc.output_transcription.text: send({"type": "out", "text": sc.output_transcription.text})
+                    if sc.turn_complete: send({"type": "turn"})
+                if not got: return                             # ulanish yopilgan
+
+        tasks = [asyncio.create_task(up()), asyncio.create_task(down())]
+        try:
+            done, pending = await asyncio.wait(tasks, timeout=LIVE_SECONDS, return_when=asyncio.FIRST_COMPLETED)
+            if not done: send({"type": "error", "text": "Suhbat vaqti tugadi. Qayta boshlang."})
+            for t in pending: t.cancel()
+            for t in done:
+                if t.exception(): raise t.exception()
+        finally:
+            try: ws.close()     # executor'dagi ws.receive() ni bo'shatadi
+            except Exception: pass
+
+@sock.route("/ws/live")
+def ws_live(ws):
+    global LIVE_ACTIVE
+    def say(t):
+        try: ws.send(json.dumps({"type": "error", "text": t}, ensure_ascii=False))
+        except Exception: pass
+    if not gclient: return say("Jonli suhbat o'chiq: GEMINI_API_KEY o'rnatilmagan.")
+    ip = (request.headers.get("X-Forwarded-For") or request.remote_addr or "").split(",")[0].strip()
+    lang = request.args.get("lang", "uz")
+    with LIVE_LOCK:
+        ok = LIVE_ACTIVE < LIVE_MAX and live_allowed(ip)
+        if ok: LIVE_ACTIVE += 1
+    if not ok: return say("Hozir band yoki limit tugadi. Birozdan keyin urinib ko'ring.")
+    try: asyncio.run(live_bridge(ws, lang))
+    except Exception:
+        app.logger.exception("live xatolik"); say("Jonli suhbat uzildi.")
+    finally:
+        with LIVE_LOCK: LIVE_ACTIVE -= 1
+
 @app.post("/api/ai")
 def api_ai():
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key: return jsonify(error="AI yo'qilmagan: ANTHROPIC_API_KEY o'rnatilmagan."), 503
     j = request.get_json(silent=True) or {}
     msg = f"Tahlil natijasi: {json.dumps(j.get('result'), ensure_ascii=False)}\nMatn: {j.get('text', '')}"
+    if use_gemini():
+        try: return jsonify(text=gemini_text(SYS + LANGS.get(j.get("lang"), ""), [{"role": "user", "content": msg}]))
+        except Exception: return jsonify(error="AI hozir javob bermadi."), 502
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if not key: return jsonify(error="AI yoqilmagan: ANTHROPIC_API_KEY yoki GEMINI_API_KEY o'rnatilmagan."), 503
     body = json.dumps({"model": os.environ.get("AI_MODEL", "claude-sonnet-5-5"), "max_tokens": 400, "system": SYS + LANGS.get(j.get("lang"), ""), "messages": [{"role": "user", "content": msg}]}).encode()
     req = urllib.request.Request("https://api.anthropic.com/v1/messages", body, {"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
     try:
@@ -486,13 +673,16 @@ def api_ai():
 
 @app.post("/api/chat")
 def api_chat():
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key: return jsonify(error="AI yo'qilmagan: ANTHROPIC_API_KEY o'rnatilmagan."), 503
     j = request.get_json(silent=True) or {}; ms = []
     for m in (j.get("messages") or [])[-10:]:
         if isinstance(m, dict) and m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str):
             ms.append({"role": m["role"], "content": m["content"][:1500]})
     if not ms: return jsonify(error="Xabar yo'q."), 400
+    if use_gemini():
+        try: return jsonify(text=gemini_text(SYS + LANGS.get(j.get("lang"), ""), ms))
+        except Exception: return jsonify(error="AI bilan bog'lanishda xatolik."), 502
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if not key: return jsonify(error="AI yoqilmagan: ANTHROPIC_API_KEY yoki GEMINI_API_KEY o'rnatilmagan."), 503
     body = json.dumps({"model": os.environ.get("AI_MODEL", "claude-sonnet-5-5"), "max_tokens": 500, "system": SYS + LANGS.get(j.get("lang"), ""), "messages": ms}).encode()
     req = urllib.request.Request("https://api.anthropic.com/v1/messages", body, {"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
     try:
