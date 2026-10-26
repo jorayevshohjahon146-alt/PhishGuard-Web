@@ -1,7 +1,8 @@
-"""PhishGuard — Kiberxavfsizlik va IT yangiliklar ilovasi (Flask). Ishga tushirish: python app.py"""
+"""PhishGuard — Kiberxavfsizlik, IT yangiliklar va AI yordamchi ilovasi (Flask + Google Gemini). Ishga tushirish: python app.py"""
 import hashlib, io, json, os, re, zipfile
 from urllib.parse import urlparse
 from flask import Flask, Response, jsonify, request
+from google import genai
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
@@ -143,6 +144,33 @@ def api_news():
         }
     ])
 
+LANGS = {"uz": " Javob tili: o'zbek.", "kr": " Javob tili: o'zbek (kirill).", "ru": " Язык ответа: русский.", "en": " Reply in English.", "tr": " Türkçe yanıt ver."}
+SYS = "Sen PhishGuard kiberxavfsizlik, dasturlash va kompyuter tarmoqlari bo'yicha mutaxassis va yordamchisan. Qisqa, professional va aniq maslahat ber."
+
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+
+@app.post("/api/ai")
+def api_ai():
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        return jsonify(error="AI yo'qilmagan: GEMINI_API_KEY o'rnatilmagan."), 503
+    j = request.get_json(silent=True) or {}
+    msg = f"Tahlil natijasi: {json.dumps(j.get('result'), ensure_ascii=False)}\nMatn: {j.get('text', '')}"
+    sys_instruction = SYS + LANGS.get(j.get("lang"), "")
+    model_name = os.environ.get("AI_MODEL", "gemini-2.5-flash")
+    try:
+        response = client.models.generate_content(
+            model=model_name,
+            contents=msg,
+            config=genai.types.GenerateContentConfig(
+                system_instruction=sys_instruction,
+                max_output_tokens=400,
+            )
+        )
+        return jsonify(text=response.text)
+    except Exception as e:
+        return jsonify(error=f"AI bilan bog'lanishda xatolik: {str(e)}"), 502
+
 HTML = r'''<!doctype html><html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>PhishGuard</title><link rel="manifest" href="/manifest.json"><link rel="icon" href="/icon.svg"><meta name="theme-color" content="#0b1020">
 <style>
@@ -163,274 +191,4 @@ textarea,input[type=file],input[type=number]{width:100%;background:rgba(0,0,0,0.
 .mid{--c:var(--mid)}.high{--c:var(--high)}.lbl{font-weight:700;font-size:20px;color:var(--c)}
 .rs{margin:12px 0 0;padding:0;list-style:none}.rs li{padding:12px 14px;border-left:3px solid var(--c);background:rgba(255,255,255,0.03);border-radius:0 12px 12px 0;margin:8px 0}.rs b{display:block;margin-bottom:2px}.rs span{color:var(--mu);font-size:14px}
 code{word-break:break-all;font-size:12px;color:var(--ac);background:rgba(0,0,0,0.4);padding:2px 6px;border-radius:6px}
-nav{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;gap:4px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:rgba(11,16,32,0.85);backdrop-filter:blur(20px);border-top:1px solid var(--bd);z-index:100}
-nav button{flex:1;max-width:90px;background:none;border:0;color:var(--mu);font:inherit;font-size:11px;padding:6px 4px;border-radius:12px;cursor:pointer;transition:0.2s}nav button i{display:block;font-size:18px;font-style:normal;margin-bottom:2px}nav button.on{color:var(--ac);background:rgba(94,234,212,0.1)}
-.step{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--bd)}.step input{width:22px;height:22px;accent-color:var(--ac);margin-top:3px}.step.d{opacity:.5}.step.d b{text-decoration:line-through}
-.opt{display:block;width:100%;text-align:left;margin:8px 0;padding:14px;border-radius:14px;border:1px solid var(--bd);background:transparent;color:var(--tx);font:inherit;cursor:pointer;transition:0.2s}.opt:hover{border-color:var(--ac)}.opt.ok{border-color:var(--low);background:rgba(52,211,153,0.15)}.opt.no{border-color:var(--high);background:rgba(248,113,113,0.15)}
-.h{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--bd)}.pill{font-size:12px;padding:3px 12px;border-radius:99px;background:var(--c);color:#04201c;font-weight:700;--c:var(--low)}
-.news-item{background:rgba(255,255,255,0.03);border:1px solid var(--bd);border-radius:16px;padding:16px;margin:12px 0}.news-date{font-size:12px;color:var(--ac);margin-bottom:4px}.news-title{font-size:16px;font-weight:700;color:var(--tx);margin-bottom:6px}
-</style></head><body>
-<header>
-  <div class="brand">
-    <img src="/icon.svg" alt="">
-    <div><b>PhishGuard</b><span id="sub-title">IT, Tarmoqlar & Kiberxavfsizlik</span></div>
-  </div>
-  <select class="lang-select" id="langSelect">
-    <option value="uz">🇺🇿 O'zbek</option>
-    <option value="kr">🇺🇿 Ўзбек</option>
-    <option value="ru">🇷🇺 Русский</option>
-    <option value="en">🇬🇧 English</option>
-    <option value="tr">🇹🇷 Türkçe</option>
-  </select>
-</header>
-<main>
-<section id="home">
-<div class="card"><h2>Xavfsizlik holati</h2><p id="hs">Yuklanmoqda…</p><div class="grid" style="margin-top:14px"><div class="tile"><small>Tekshiruvlar</small><h2 id="n1">0</h2></div><div class="tile"><small>Xavfli topilgan</small><h2 id="n2">0</h2></div><div class="tile"><small>Akademiya bali</small><h2 id="n3">—</h2></div></div></div>
-<div class="grid">
-<button class="tile" data-go="url"><i>🔗</i>URL Scanner <small>Fishing havola</small></button>
-<button class="tile" data-go="message"><i>💬</i>MessageGuard <small>SMS / chat matni</small></button>
-<button class="tile" data-go="qr"><i>📷</i>QR Guard <small>QR ichidagi havola</small></button>
-<button class="tile" data-go="file"><i>📁</i>FileGuard + APK <small>Xesh va ruxsatlar</small></button>
-<button class="tile" data-go="card"><i>💳</i>CardGuard <small>Karta raqami</small></button>
-<button class="tile" data-go="voice"><i>🎙</i>VoiceGuard <small>Ovozli tahlil</small></button>
-<button class="tile" data-nav="news"><i>📰</i>Yangiliklar <small>IT va Kiberxavfsizlik</small></button>
-</div>
-</section>
-
-<section id="check" hidden><div class="tabs" id="tabs"></div><div class="card"><h3 id="ct"></h3><div id="inp"></div></div><div id="out"></div></section>
-<section id="news" hidden><div class="card"><h2>📰 IT va Kiberxavfsizlik Yangiliklari</h2><p>Dasturlash, kompyuter tarmoqlari va axborot xavfsizligi bo'yicha global yangiliklar.</p><div id="news-list" style="margin-top:15px">Yuklanmoqda...</div></div></section>
-<section id="sos" hidden><div class="card"><h2>🆘 Men aldandim</h2><p>Ketma-ket tezkor qadamlarni bajaring.</p><div id="steps"></div><button class="btn g" id="cmp" style="margin-top:12px">📝 Shikoyat matnini tayyorlash</button><textarea id="cmpt" hidden></textarea></div></section>
-<section id="acad" hidden><div class="card" id="quiz"></div></section>
-<section id="hist" hidden><div class="card"><h2>Tekshiruv tarixi</h2><p>Faqat qisqa ko'rinish saqlanadi. Karta raqami saqlanmaydi.</p><div id="hl"></div><button class="btn g" id="hc" style="margin-top:12px">🗑 Tarixni o'chirish</button></div></section>
-</main>
-<nav>
-<button data-t="home"><i>🏠</i>Bosh</button>
-<button data-t="check"><i>🔍</i>Tekshir</button>
-<button data-t="news"><i>📰</i>Yangilik</button>
-<button data-t="sos"><i>🆘</i>SOS</button>
-<button data-t="acad"><i>🎓</i>Akademiya</button>
-<button data-t="hist"><i>🕘</i>Tarix</button>
-</nav>
-
-<script>
-const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const ls=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}},sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
-const post=(p,b)=>fetch(p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json());
-
-let curMode="url", lang=ls("lang","uz");
-
-const SUB_TITLES = {
-    uz: "IT, Tarmoqlar & Kiberxavfsizlik",
-    kr: "ИТ, Тармоқлар ва Киберхавфсизлик",
-    ru: "ИТ, Сети и Кибербезопасность",
-    en: "IT, Networks & Cybersecurity",
-    tr: "BT, Ağlar ve Siber Güvenlik"
-};
-
-const langSelect = $("#langSelect");
-if(langSelect){
-    langSelect.value = lang;
-    langSelect.onchange = () => {
-        lang = langSelect.value;
-        sv("lang", lang);
-        $("#sub-title").textContent = SUB_TITLES[lang] || SUB_TITLES["uz"];
-        location.reload();
-    };
-}
-
-function show(id){
-    $$("main>section").forEach(s=>s.hidden=(s.id!==id));
-    $$("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===id));
-    if(id==="home") stats();
-    if(id==="hist") hist();
-    if(id==="acad") quiz();
-    if(id==="news") loadNews();
-    window.scrollTo(0,0);
-}
-
-$$("nav button").forEach(b=>b.onclick=()=>show(b.dataset.t));
-document.addEventListener("click", e=>{
-    const btn = e.target.closest("[data-go]");
-    if(btn){ mode(btn.dataset.go); show("check"); }
-    const navBtn = e.target.closest("[data-nav]");
-    if(navBtn){ show(navBtn.dataset.nav); }
-});
-
-const M={
-    url:["🔗 URL Scanner","Havolani joylang","https://payme-login.xyz/verify"],
-    message:["💬 MessageGuard","SMS yoki xabar matnini joylang","Hisobingiz yopiladi — hozir tasdiqlash kodini yuboring"],
-    card:["💳 CardGuard","Karta raqamini kiriting (saqlanmaydi)","8600 0000 0000 0000"],
-    file:["📁 FileGuard + APK Shield","Fayl tanlang (maksimal 20 MB)"],
-    qr:["📷 QR Guard","QR kodli rasm tanlang"],
-    voice:["🎙 VoiceGuard","Ovozli xabar yoki audio fayl yuklang"]
-};
-
-$("#tabs").innerHTML=Object.keys(M).map(k=>`<button data-m="${k}">${M[k][0].split(" ")[0]} ${M[k][0].split(" ")[1]||""}</button>`).join("");
-$$("#tabs button").forEach(b=>b.onclick=()=>mode(b.dataset.m));
-
-function mode(m){
-    curMode=m;
-    $$("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.m===m));
-    $("#ct").textContent=M[m][0]; $("#out").innerHTML="";
-    if(m==="file") {
-        $("#inp").innerHTML=`<p>${M[m][1]}</p><input type="file" id="f"><button class="btn" id="go">Tekshirish</button>`;
-        $("#go").onclick=()=>fileScan($("#f").files[0]);
-    } else if(m==="qr") {
-        $("#inp").innerHTML=`<p>${M[m][1]}</p><input type="file" accept="image/*" id="qi"><button class="btn" id="go">O'qish</button>`;
-        $("#go").onclick=()=>qrFile($("#qi").files[0]);
-    } else if(m==="voice") {
-        $("#inp").innerHTML=`<p>${M[m][1]}</p><input type="file" accept="audio/*" id="vi"><button class="btn" id="go">Audio tahlil qilish</button>`;
-        $("#go").onclick=()=>voiceScan($("#vi").files[0]);
-    } else {
-        $("#inp").innerHTML=`<p>${M[m][1]}</p><textarea id="t" placeholder="${M[m][2]}"></textarea><button class="btn" id="go">Tekshirish</button>`;
-        $("#go").onclick=()=>run(m,$("#t").value);
-    }
-}
-
-async function loadNews(){
-    try{
-        const res = await fetch("/api/news").then(r=>r.json());
-        $("#news-list").innerHTML = res.map(n=>`
-            <div class="news-item">
-                <div class="news-date">📅 ${esc(n.date)} &bull; <b>${esc(n.category)}</b></div>
-                <div class="news-title">${esc(n.title)}</div>
-                <p>${esc(n.content)}</p>
-            </div>
-        `).join("");
-    }catch{
-        $("#news-list").innerHTML = "<p>Yangiliklarni yuklab bo'lmadi.</p>";
-    }
-}
-
-async function run(m,text){
-    if(!text || !text.trim()) return;
-    $("#out").innerHTML='<div class="card">Tahlil qilinmoqda…</div>';
-    try{
-        const r = await post("/api/"+m, {text});
-        render(r);
-        rec(m, m==="card"?"":text, r);
-    }catch{
-        $("#out").innerHTML='<div class="card">Server bilan aloqa yo\'q.</div>';
-    }
-}
-
-async function fileScan(f){
-    if(!f) return;
-    const fd=new FormData(); fd.append("file",f);
-    $("#out").innerHTML='<div class="card">Fayl va APK ruxsatlari tahlil qilinmoqda…</div>';
-    try{
-        const r = await fetch("/api/file",{method:"POST",body:fd}).then(r=>r.json());
-        render(r);
-        rec("file",f.name,r);
-    }catch{
-        $("#out").innerHTML='<div class="card">Fayl yuborilmadi.</div>';
-    }
-}
-
-async function voiceScan(f){
-    if(!f) return;
-    $("#out").innerHTML='<div class="card">Ovozli tahlil bajarilmoqda…</div>';
-    setTimeout(()=>{
-        render({score:15, level:"low", label:"Past xavf", advice:"Ovozli tahlil natijasida shubhali sintetik (Deepfake) belgilar topilmadi.", reasons:[{t:"Spektral barqarorlik", why:"Ovoz chastotasi tabiiy diapazonga mos."}]});
-    }, 1500);
-}
-
-function qrFile(f){
-    if(!f) return alert("Rasm tanlang!");
-    $("#out").innerHTML='<div class="card">QR kod skanerlandi va tarmoq trafigi tahlil qilindi.</div>';
-}
-
-function render(r){
-    if(r.error){ $("#out").innerHTML=`<div class="card">${esc(r.error)}</div>`; return; }
-    const ex = (r.masked ? `<p>${esc(r.brand)} • ${esc(r.masked)}</p>` : "") + (r.sha256 ? `<p>SHA-256:<br><code>${r.sha256}</code></p>` : "");
-    $("#out").innerHTML=`<div class="card ${r.level}"><div class="res"><div class="ring ${r.level}" style="--p:${r.score}"><b>${r.score}</b></div><div><div class="lbl">${r.label}</div><p>${esc(r.advice)}</p></div></div>${ex}<ul class="rs ${r.level}">${r.reasons.map(x=>`<li><b>${esc(x.t)}</b><span>Nega? ${esc(x.why)}</span></li>`).join("")}</ul>${r.level==="high"?'<button class="btn" style="margin-top:12px" onclick="show(\'sos\')">🆘 Aldanib qoldim</button>':""}</div>`;
-}
-
-const SOS=[
-    ["Kartani himoyalash","Bankning rasmiy ilovasi yoki call-markazi orqali kartani bloklang."],
-    ["Bankka xabar berish","Rasmiy aloqa kanali orqali shubhali operatsiya haqida xabar bering."],
-    ["Hisoblarni himoyalash","Parollarni almashtiring va 2-bosqichli himoyani yoqing."],
-    ["Dalillarni saqlash","Xabar va tranzaksiya skrinshotlarini saqlang."]
-];
-
-function steps(){
-    const d=ls("sos",[]);
-    $("#steps").innerHTML=SOS.map((s,i)=>`<label class="step ${d[i]?"d":""}"><input type="checkbox" data-i="${i}" ${d[i]?"checked":""}><div><b>${i+1}. ${s[0]}</b><p>${s[1]}</p></div></label>`).join("");
-    $$("#steps input").forEach(c=>c.onchange=()=>{const x=ls("sos",[]);x[c.dataset.i]=c.checked;sv("sos",x);steps()});
-}
-steps();
-
-$("#cmp").onclick=()=>{
-    const t=$("#cmpt"); t.hidden=false;
-    t.value=`Hurmatli bank xodimlari!\n\n${new Date().toLocaleString("uz")} da men kiberfiribgarlik qurboni bo'ldim. Tarmoq va tranzaksiya ma'lumotlarini tekshirishingizni so'rayman.`;
-};
-
-const Q=[
-    ["Telegram'da tanishingiz ovozi bilan kelgan audioxabarda zudlik bilan pul o'tkazishni so'rashmoqda. Nima qilasiz?", ["Darhol pul o'tkazaman, chunki ovozi o'ziniki","Boshqa aloqa kanali orqali unga o'zim qo'ng'iroq qilib tasdiqlayman","Hech narsa qilmayman, e'tibor bermayman"], 1, "Sun'iy intellekt (Deepfake) yordamida yaqinlaringiz ovozini soxtalashtirishlari mumkin. Har doim boshqa aloqa orqali tekshiring."],
-    ["Sayt manzili: https://click.uz.security-update.xyz. Bu manzil haqiqiy Click saytimi?", ["Ha, chunki boshida click.uz yozilgan","Yo'q, bu soxta fishing domen (asosiy domen oxirgi ikki qismda bo'ladi)","Ha, xavfsizlik yangilanishi sahifasi"], 1, "Firibgarlar taniqli brend nomini domen boshiga yozib, haqiqiy kabi ko'rsatishga harakat qilishadi."],
-    ["Notanish APK fayl 'SMS o'qish' va 'Bildirishnoma nazorati' huquqini so'ramoqda. Bu nimani anglatadi?", ["Oddiy dasturiy talab","Bank SMS kodlarini o'g'irlaydigan troyan (virus) ehtimoli yuqori","Fayl hajmini optimallashtirish uchun"], 1, "SMS o'qish ruxsati firibgarlarga bankdan keladigan tasdiq kodlarini qo'lga kiritish imkonini beradi."],
-    ["TCP/IP modelining transport qatlamida qaysi protokollar ishlaydi?", ["IP va ARP","TCP va UDP","HTTP va FTP","DNS va DHCP"], 1, "TCP va UDP tarmoqda ma'lumotlar ishonchli yoki tezkor uzatilishini ta'minlovchi transport qatlam protokollaridir."],
-    ["Jamoat joyidagi (cafe) ochiq Wi-Fi tarmog'iga ulanib bank ilovasidan foydalanishning xavfi nimada?", ["Hech qanday xavfi yo'q","Trafigingizni 'Man-in-the-Middle' (o'rtadagi odam) hujumi orqali ushlab qolishlari mumkin","Internet tezligi pasayib ketadi"], 1, "Ochiq tarmoqlarda shifrlanmagan ma'lumotlar tajovuzkorlar tomonidan o'qib olinishi mumkin."]
-];
-
-let qi=0,qs=0;
-function quiz(){ qi=0; qs=0; qn(); }
-function qn(){
-    if(qi>=Q.length){
-        const p=Math.round(qs/Q.length*100);
-        sv("acad",Math.max(p,ls("acad",0)));
-        $("#quiz").innerHTML=`<h2>Natija: ${p}%</h2><button class="btn" id="rs">Qayta boshlash</button>`;
-        $("#rs").onclick=quiz;
-        return;
-    }
-    const q=Q[qi];
-    $("#quiz").innerHTML=`<p>Savol ${qi+1}/${Q.length}</p><h2>${q[0]}</h2>${q[1].map((o,i)=>`<button class="opt" data-i="${i}">${o}</button>`).join("")}<p id="ex"></p>`;
-    $$(".opt").forEach(b=>b.onclick=()=>{
-        const i=+b.dataset.i;
-        $$(".opt").forEach(x=>x.disabled=true);
-        $$(".opt")[q[2]].classList.add("ok");
-        if(i===q[2]) qs++; else b.classList.add("no");
-        $("#ex").textContent=q[3];
-        setTimeout(()=>{qi++;qn()},1800);
-    });
-}
-
-function rec(k,p,r){
-    if(r.error) return;
-    const x=ls("hist",[]);
-    x.unshift({kind:k,preview:String(p).slice(0,80),score:r.score,level:r.level});
-    sv("hist",x.slice(0,50));
-}
-
-function stats(){
-    const x=ls("hist",[]), hi=x.filter(i=>i.level==="high").length;
-    $("#n1").textContent=x.length;
-    $("#n2").textContent=hi;
-    $("#hs").textContent=x.length ? `${hi} ta yuqori xavfli holat aniqlandi.` : "Tahlillar hali yo'q. Birinchi tarmoq yoki havolani tekshiring.";
-    $("#n3").textContent=ls("acad",null)==null ? "—" : ls("acad",0)+"%";
-}
-
-function hist(){
-    $("#hl").innerHTML=ls("hist",[]).map(x=>`<div class="h"><div><b>${esc(x.kind)}</b><br><code>${esc(x.preview||"")}</code></div><span class="pill" style="--c:var(--${x.level})">${x.score}</span></div>`).join("")||"<p>Bo'sh.</p>";
-}
-$("#hc").onclick=()=>{ if(confirm("Tarix o'chirilsinmi?")){ sv("hist",[]); hist(); } };
-
-mode("url"); show("home");
-</script>
-</body></html>
-'''
-
-@app.get("/health")
-def health(): return "ok"
-
-@app.get("/")
-def index(): return Response(HTML, mimetype="text/html")
-
-@app.get("/manifest.json")
-def manifest(): return Response(json.dumps({"name": "PhishGuard", "short_name": "PhishGuard", "start_url": "/", "display": "standalone", "background_color": "#0b1020", "theme_color": "#0b1020"}), mimetype="application/manifest+json")
-
-@app.get("/icon.svg")
-def icon(): return Response('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="#5eead4"/></svg>', mimetype="image/svg+xml")
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), debug=bool(os.environ.get("DEBUG")))
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;gap:4px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:rgba(11,16,32,0.85);backdrop-filter:blur(20px);
