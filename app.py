@@ -1,8 +1,7 @@
-"""PhishGuard — Kiberxavfsizlik, IT yangiliklar va AI yordamchi ilovasi (Flask + SQLite). Ishga tushirish: python app.py"""
-import hashlib, io, json, os, re, time, urllib.request, zipfile
-from collections import defaultdict, deque
+"""PhishGuard — Kiberxavfsizlik va IT yangiliklar ilovasi (Flask). Ishga tushirish: python app.py"""
+import hashlib, io, json, os, re, zipfile
 from urllib.parse import urlparse
-from flask import Flask, Response, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
@@ -194,7 +193,6 @@ nav button{flex:1;max-width:90px;background:none;border:0;color:var(--mu);font:i
 <button class="tile" data-go="file"><i>📁</i>FileGuard + APK <small>Xesh va ruxsatlar</small></button>
 <button class="tile" data-go="card"><i>💳</i>CardGuard <small>Karta raqami</small></button>
 <button class="tile" data-go="voice"><i>🎙</i>VoiceGuard <small>Ovozli tahlil</small></button>
-<button class="tile" data-go="chat"><i>🤖</i>AI Maslahatchi <small>Jonli suhbat</small></button>
 <button class="tile" data-nav="news"><i>📰</i>Yangiliklar <small>IT va Kiberxavfsizlik</small></button>
 </div>
 </section>
@@ -264,8 +262,7 @@ const M={
     card:["💳 CardGuard","Karta raqamini kiriting (saqlanmaydi)","8600 0000 0000 0000"],
     file:["📁 FileGuard + APK Shield","Fayl tanlang (maksimal 20 MB)"],
     qr:["📷 QR Guard","QR kodli rasm tanlang"],
-    voice:["🎙 VoiceGuard","Ovozli xabar yoki audio fayl yuklang"],
-    chat:["🤖 AI Maslahatchi (Jonli)","Kiberxavfsizlik va dasturlash bo'yicha savolingizni bering...","Masalan: Python'da xavfsiz API yozishni tushuntir"]
+    voice:["🎙 VoiceGuard","Ovozli xabar yoki audio fayl yuklang"]
 };
 
 $("#tabs").innerHTML=Object.keys(M).map(k=>`<button data-m="${k}">${M[k][0].split(" ")[0]} ${M[k][0].split(" ")[1]||""}</button>`).join("");
@@ -284,36 +281,10 @@ function mode(m){
     } else if(m==="voice") {
         $("#inp").innerHTML=`<p>${M[m][1]}</p><input type="file" accept="audio/*" id="vi"><button class="btn" id="go">Audio tahlil qilish</button>`;
         $("#go").onclick=()=>voiceScan($("#vi").files[0]);
-    } else if(m==="chat") {
-        chatUI();
     } else {
         $("#inp").innerHTML=`<p>${M[m][1]}</p><textarea id="t" placeholder="${M[m][2]}"></textarea><button class="btn" id="go">Tekshirish</button>`;
         $("#go").onclick=()=>run(m,$("#t").value);
     }
-}
-
-let CH=[];
-function chatUI(){
-    $("#inp").innerHTML=`<div id="cl" style="max-height:300px;overflow-y:auto;margin-bottom:12px"></div><textarea id="ci" placeholder="${M.chat[1]}"></textarea><button class="btn" id="cb">Yuborish</button>`;
-    drawChat();
-    $("#cb").onclick=()=>sendChat($("#ci").value);
-}
-function drawChat(){
-    const l=$("#cl"); if(!l) return;
-    l.innerHTML=CH.map(m=>`<div class="card" style="${m.role==='user'?'margin-left:20px':'margin-right:20px;border-color:var(--ac)'}"><p style="white-space:pre-line;color:var(--tx)">${esc(m.content)}</p></div>`).join("")||"<p>Hali xabarlar yo'q. Savol bering!</p>";
-    l.scrollTop=l.scrollHeight;
-}
-async function sendChat(t){
-    if(!t.trim()) return;
-    CH.push({role:"user",content:t}); $("#ci").value="";
-    CH.push({role:"assistant",content:"AI o'ylamoqda..."}); drawChat();
-    try{
-        const r = await post("/api/chat",{messages:CH.slice(0,-1),lang});
-        CH[CH.length-1].content = r.text || r.error || "Javob kelmadi.";
-    }catch{
-        CH[CH.length-1].content = "Server bilan aloqa yo'q.";
-    }
-    drawChat();
 }
 
 async function loadNews(){
@@ -338,7 +309,6 @@ async function run(m,text){
         const r = await post("/api/"+m, {text});
         render(r);
         rec(m, m==="card"?"":text, r);
-        if(m!=="card" && !r.error) aiExplain(text, r);
     }catch{
         $("#out").innerHTML='<div class="card">Server bilan aloqa yo\'q.</div>';
     }
@@ -374,24 +344,6 @@ function render(r){
     if(r.error){ $("#out").innerHTML=`<div class="card">${esc(r.error)}</div>`; return; }
     const ex = (r.masked ? `<p>${esc(r.brand)} • ${esc(r.masked)}</p>` : "") + (r.sha256 ? `<p>SHA-256:<br><code>${r.sha256}</code></p>` : "");
     $("#out").innerHTML=`<div class="card ${r.level}"><div class="res"><div class="ring ${r.level}" style="--p:${r.score}"><b>${r.score}</b></div><div><div class="lbl">${r.label}</div><p>${esc(r.advice)}</p></div></div>${ex}<ul class="rs ${r.level}">${r.reasons.map(x=>`<li><b>${esc(x.t)}</b><span>Nega? ${esc(x.why)}</span></li>`).join("")}</ul>${r.level==="high"?'<button class="btn" style="margin-top:12px" onclick="show(\'sos\')">🆘 Aldanib qoldim</button>':""}</div>`;
-}
-
-async function aiExplain(text, r){
-    const c = $("#out .card"); if(!c) return;
-    const btn = document.createElement("button");
-    btn.className = "btn g"; btn.style.marginTop = "12px"; btn.textContent = "🤖 AI bilan chuqur tahlil qilish";
-    const p = document.createElement("p"); p.style.whiteSpace = "pre-line"; p.style.marginTop = "8px";
-    btn.onclick = async()=>{
-        btn.disabled = true; btn.textContent = "AI o'ylamoqda...";
-        try{
-            const res = await post("/api/ai", {lang, text, result: r});
-            p.textContent = res.text || res.error || "Javob olinmadi.";
-        }catch{
-            p.textContent = "AI bilan aloqa yo'q.";
-        }
-        btn.remove();
-    };
-    c.append(btn, p);
 }
 
 const SOS=[
@@ -467,38 +419,6 @@ mode("url"); show("home");
 </script>
 </body></html>
 '''
-
-LANGS = {"uz": " Javob tili: o'zbek.", "kr": " Javob tili: o'zbek (kirill).", "ru": " Язык ответа: русский.", "en": " Reply in English.", "tr": " Türkçe yanıt ver."}
-SYS = "Sen PhishGuard kiberxavfsizlik, dasturlash va kompyuter tarmoqlari bo'yicha mutaxassis va yordamchisan. Qisqa, professional va aniq maslahat ber."
-
-@app.post("/api/ai")
-def api_ai():
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key: return jsonify(error="AI yo'qilmagan: ANTHROPIC_API_KEY o'rnatilmagan."), 503
-    j = request.get_json(silent=True) or {}
-    msg = f"Tahlil natijasi: {json.dumps(j.get('result'), ensure_ascii=False)}\nMatn: {j.get('text', '')}"
-    body = json.dumps({"model": os.environ.get("AI_MODEL", "claude-sonnet-5-5"), "max_tokens": 400, "system": SYS + LANGS.get(j.get("lang"), ""), "messages": [{"role": "user", "content": msg}]}).encode()
-    req = urllib.request.Request("https://api.anthropic.com/v1/messages", body, {"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r: d = json.load(r)
-        return jsonify(text="".join(b.get("text", "") for b in d.get("content", [])).strip())
-    except Exception: return jsonify(error="AI hozir javob bermadi."), 502
-
-@app.post("/api/chat")
-def api_chat():
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key: return jsonify(error="AI yo'qilmagan: ANTHROPIC_API_KEY o'rnatilmagan."), 503
-    j = request.get_json(silent=True) or {}; ms = []
-    for m in (j.get("messages") or [])[-10:]:
-        if isinstance(m, dict) and m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str):
-            ms.append({"role": m["role"], "content": m["content"][:1500]})
-    if not ms: return jsonify(error="Xabar yo'q."), 400
-    body = json.dumps({"model": os.environ.get("AI_MODEL", "claude-sonnet-5-5"), "max_tokens": 500, "system": SYS + LANGS.get(j.get("lang"), ""), "messages": ms}).encode()
-    req = urllib.request.Request("https://api.anthropic.com/v1/messages", body, {"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r: d = json.load(r)
-        return jsonify(text="".join(b.get("text", "") for b in d.get("content", [])).strip())
-    except Exception: return jsonify(error="AI bilan bog'lanishda xatolik."), 502
 
 @app.get("/health")
 def health(): return "ok"
