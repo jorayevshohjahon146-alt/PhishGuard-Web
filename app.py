@@ -1,4 +1,4 @@
-"""PhishGuard Advanced — Flask platforma. Ishga tushirish: python app.py
+"""PhishGuard Advanced — Flask platforma. Ishga tushirish: python app_advanced.py
 Tarix SQLite bazasida saqlanadi; foydalanuvchi kiritgan maxfiy matnlar saqlanmaydi.
 URL tahlili qoidaviy (heuristic); haqiqiy ML modeli alohida o‘qitilib ulanishi kerak.
 """
@@ -115,7 +115,6 @@ def _scan_url(raw):
     if host.count("-") >= 3: add(8, "Ko'p defis", "Soxta domenlarda tez-tez uchraydi.")
     if len(raw) > 75: add(8, "Juda uzun URL", "Uzun manzillar shubhali qismlarni yashirishi mumkin.")
 
-    # Qo'shimcha URL xususiyatlari. Bu qoidaviy tahlil, ML modeli emas.
     if u.port not in (None, 80, 443):
         add(10, "Noodatiy port", "Veb-sayt odatiy bo'lmagan portdan foydalanmoqda.")
     if host.startswith("www-") or host.endswith("-login"):
@@ -125,8 +124,7 @@ def _scan_url(raw):
     if u.username or u.password:
         add(25, "URL ichida login/parol qismi", "Manzil tarkibida foydalanuvchi ma'lumotlari bor.")
     if not scheme:
-        r.append(("Sxema avtomatik HTTPS deb olindi",
-                  "Haqiqiy ulanish xavfsizligini tekshirish uchun sayt sertifikatini alohida tekshirish kerak."))
+        r.append(("Sxema avtomatik HTTPS deb olindi", "Haqiqiy ulanish xavfsizligini tekshirish uchun sayt sertifikatini alohida tekshirish kerak."))
     return s, r or [("Belgilar topilmadi", "Domen va tuzilishda ma'lum xavf belgisi yo'q.")]
 
 PAT = [(r"hozir|zudlik|tezda|24 soat|darhol|срочно|немедленно|сейчас|urgent|immediately|asap", 20, "Shoshiltirish", "Firibgarlar o'ylashga vaqt bermaydi."),
@@ -179,19 +177,22 @@ def api_file():
     if len(name.split(".")) > 2 and ext in EXT_BAD: s += 25; r.append(("Qo'sh kengaytma", "Masalan 'hujjat.pdf.exe' — oddiy hujjat kabi ko'rsatilgan."))
     if b[:2] == b"MZ" and ext not in EXT_BAD: s += 50; r.append(("Fayl turi yolg'on", "Ichida Windows dasturlash qismi bor, lekin kengaytma boshqacha."))
     if b[:4] == b"\x7fELF": s += 30; r.append(("ELF bajariladigan fayl", "Linux/Android ijro fayli."))
-    if ext == "apk" or (b[:4] == b"PK\x03\x04" and b"AndroidManifest.xml" in b[:200000]):
+    
+    # Optimizatsiya qilingan tezkor APK tahlili
+    if ext == "apk" or b[:4] == b"PK\x03\x04":
         try:
-            z = zipfile.ZipFile(io.BytesIO(b)); m = z.read("AndroidManifest.xml")
-            txt_data = m.decode("utf-16le", "ignore") + m.decode("latin-1")
-            found = sorted(p for p in PERM if p in txt_data)
-            for p in found: s += PERM[p]; r.append((f"Ruxsat: {p}", "Bu ruxsat xavfli APK ilovalarda suiiste'mol qilinadi."))
-            ex["permissions"] = found
+            with zipfile.ZipFile(io.BytesIO(b)) as z:
+                if "AndroidManifest.xml" in z.namelist():
+                    m = z.read("AndroidManifest.xml")
+                    txt_data = m[:50000].decode("utf-16le", "ignore") + m[:50000].decode("latin-1", "ignore")
+                    found = sorted(p for p in PERM if p in txt_data)
+                    for p in found: s += PERM[p]; r.append((f"Ruxsat: {p}", "Bu ruxsat xavfli APK ilovalarda suiiste'mol qilinadi."))
+                    ex["permissions"] = found
         except Exception: r.append(("APK o'qilmadi", "Fayl buzilgan yoki himoyalangan bo'lishi mumkin."))
     return out("Fayl", name, s, r or [("Aniq belgi topilmadi", "Hech bir skaner mutlaq xavfsizlikni kafolatlamaydi.")], ex)
 
 @app.get("/api/history")
 def api_history():
-    """Oxirgi tekshiruvlar; maxfiy matnlar va to'liq URL saqlanmaydi."""
     try:
         limit = min(max(int(request.args.get("limit", 50)), 1), 200)
     except ValueError:
@@ -235,27 +236,15 @@ def api_news():
     return jsonify([
         {
             "date": "2026-10-24",
-            "title": "OpenSSL'da yangi kritik zaiflik aniqlandi: tarmoq administratorlari shoshilinch yangilanishlari shart",
+            "title": "OpenSSL'da yangi kritik zaiflik aniqlandi: tarmoq administratorlari shoshilinch yangilashlari shart",
             "category": "Kiberxavfsizlik",
-            "content": "Kriptografik protokollarni himoya qiluvchi OpenSSL kutubxonasida masofadan turib kod bajarishga olib keluvchi xavfsizlik oshig'i topildi. Server va kompyuter tarmoqlari administratorlaridan tarmoqni zudlik bilan patch qilish talab etilmoqda."
+            "content": "Kriptografik protokollarni himoya qiluvchi OpenSSL kutubxonasida masofadan turib kod bajarishga olib keluvchi xavfsizlik oshig'i topildi."
         },
         {
             "date": "2026-10-23",
             "title": "Python 3.15 rasman e'lon qilindi: yangi JIT kompilyator va xotirani optimizatsiyalash usullari",
             "category": "Dasturlash / IT",
-            "content": "Dasturchilar uchun eng ommabop bo'lgan Python tilining yangi versiyasi chiqdi. U dastur bajarilish tezligini sezilarli darajada oshiruvchi hamda tarmoq dasturlarini yozishni osonlashtiruvchi yangi funksiyalarni o'z ichiga oladi."
-        },
-        {
-            "date": "2026-10-22",
-            "title": "BGP marshrutlash protokollarida xavfsizlikni ta'minlash bo'yicha yangi xalqaro standartlar kuchga kirdi",
-            "category": "Kompyuter tarmoqlari",
-            "content": "Global internet magistrallarida ma'lumotlar oqimini yo'naltiruvchi BGP (Border Gateway Protocol) xavfsizligini oshirish maqsadida RPKI (Resource Public Key Infrastructure) imzolash jarayoni majburiy tus ola boshladi."
-        },
-        {
-            "date": "2026-10-21",
-            "title": "IT mutaxassislari uchun ingliz tili: Texnik hujjatlar va RFC spetsifikatsiyalarini o'qish sirlari",
-            "category": "Til va Texnologiya",
-            "content": "Dasturlash va kiberxavfsizlik sohasida muvaffaqiyat qozonish uchun faqat kod yozish yetarli emas. Xalqaro RFC standartlari va texnik qo'llanmalarni ingliz tilida mukammal tushunish dasturchining eng asosiy ko'nikmasidir."
+            "content": "Dasturchilar uchun eng ommabop bo'lgan Python tilining yangi versiyasi chiqdi."
         }
     ])
 
@@ -282,7 +271,7 @@ code{word-break:break-all;font-size:12px;color:var(--ac);background:rgba(0,0,0,0
 nav{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;gap:4px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:rgba(11,16,32,0.85);backdrop-filter:blur(20px);border-top:1px solid var(--bd);z-index:100}
 nav button{flex:1;max-width:90px;background:none;border:0;color:var(--mu);font:inherit;font-size:11px;padding:6px 4px;border-radius:12px;cursor:pointer;transition:0.2s}nav button i{display:block;font-size:18px;font-style:normal;margin-bottom:2px}nav button.on{color:var(--ac);background:rgba(94,234,212,0.1)}
 .step{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--bd)}.step input{width:22px;height:22px;accent-color:var(--ac);margin-top:3px}.step.d{opacity:.5}.step.d b{text-decoration:line-through}
-.opt{display:block;width:100%    ;text-align:left;margin:8px 0;padding:14px;border-radius:14px;border:1px solid var(--bd);background:transparent;color:var(--tx);font:inherit;cursor:pointer;transition:0.2s}.opt:hover{border-color:var(--ac)}.opt.ok{border-color:var(--low);background:rgba(52,211,153,0.15)}.opt.no{border-color:var(--high);background:rgba(248,113,113,0.15)}
+.opt{display:block;width:100%;text-align:left;margin:8px 0;padding:14px;border-radius:14px;border:1px solid var(--bd);background:transparent;color:var(--tx);font:inherit;cursor:pointer;transition:0.2s}.opt:hover{border-color:var(--ac)}.opt.ok{border-color:var(--low);background:rgba(52,211,153,0.15)}.opt.no{border-color:var(--high);background:rgba(248,113,113,0.15)}
 .h{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--bd)}.pill{font-size:12px;padding:3px 12px;border-radius:99px;background:var(--c);color:#04201c;font-weight:700;--c:var(--low)}
 .news-item{background:rgba(255,255,255,0.03);border:1px solid var(--bd);border-radius:16px;padding:16px;margin:12px 0}.news-date{font-size:12px;color:var(--ac);margin-bottom:4px}.news-title{font-size:16px;font-weight:700;color:var(--tx);margin-bottom:6px}
 </style></head><body>
@@ -529,11 +518,10 @@ $("#cmp").onclick=()=>{
 };
 
 const Q=[
-    ["Telegram'da tanishingiz ovozi bilan kelgan audioxabarda zudlik bilan pul o'tkazishni so'rashmoqda. Nima qilasiz?", ["Darhol pul o'tkazaman, chunki ovozi o'ziniki","Boshqa aloqa kanali orqali unga o'zim qo'ng'iroq qilib tasdiqlayman","Hech narsa qilmayman, e'tibor bermayman"], 1, "Sun'iy intellekt (Deepfake) yordamida yaqinlaringiz ovozini soxtalashtirishlari mumkin. Har doim boshqa aloqa orqali tekshiring."],
-    ["Sayt manzili: https://click.uz.security-update.xyz. Bu manzil haqiqiy Click saytimi?", ["Ha, chunki boshida click.uz yozilgan","Yo'q, bu soxta fishing domen (asosiy domen oxirgi ikki qismda bo'ladi)","Ha, xavfsizlik yangilanishi sahifasi"], 1, "Firibgarlar taniqli brend nomini domen boshiga yozib, haqiqiy kabi ko'rsatishga harakat qilishadi."],
+    ["Telegram'da tanishingiz ovozi bilan kelgan audioxabarda zudlik bilan pul o'tkazishni so'rashmoqda. Nima qilasiz?", ["Darhol pul o'tkazaman, chunki ovozi o'ziniki","Boshqa aloqa kanali orqali unga o'zim qo'ng'iroq qilib tasdiqlayman","Hech narsa qilmayman, e'tibor bermayman"], 1, "Sun'iy intellekt (Deepfake) yordamida yaqinlaringiz ovozini soxtalashtirishlari mumkin."],
+    ["Sayt manzili: https://click.uz.security-update.xyz. Bu manzil haqiqiy Click saytimi?", ["Ha, chunki boshida click.uz yozilgan","Yo'q, bu soxta fishing domen","Ha, xavfsizlik yangilanishi sahifasi"], 1, "Firibgarlar taniqli brend nomini domen boshiga yozib, haqiqiy kabi ko'rsatishga harakat qilishadi."],
     ["Notanish APK fayl 'SMS o'qish' va 'Bildirishnoma nazorati' huquqini so'ramoqda. Bu nimani anglatadi?", ["Oddiy dasturiy talab","Bank SMS kodlarini o'g'irlaydigan troyan (virus) ehtimoli yuqori","Fayl hajmini optimallashtirish uchun"], 1, "SMS o'qish ruxsati firibgarlarga bankdan keladigan tasdiq kodlarini qo'lga kiritish imkonini beradi."],
-    ["TCP/IP modelining transport qatlamida qaysi protokollar ishlaydi?", ["IP va ARP","TCP va UDP","HTTP va FTP","DNS va DHCP"], 1, "TCP va UDP tarmoqda ma'lumotlar ishonchli yoki tezkor uzatilishini ta'minlovchi transport qatlam protokollaridir."],
-    ["Jamoat joyidagi (cafe) ochiq Wi-Fi tarmog'iga ulanib bank ilovasidan foydalanishning xavfi nimada?", ["Hech qanday xavfi yo'q","Trafigingizni 'Man-in-the-Middle' (o'rtadagi odam) hujumi orqali ushlab qolishlari mumkin","Internet tezligi pasayib ketadi"], 1, "Ochiq tarmoqlarda shifrlanmagan ma'lumotlar tajovuzkorlar tomonidan o'qib olinishi mumkin."]
+    ["TCP/IP modelining transport qatlamida qaysi protokollar ishlaydi?", ["IP va ARP","TCP va UDP","HTTP va FTP","DNS va DHCP"], 1, "TCP va UDP transport qatlam protokollaridir."]
 ];
 
 let qi=0,qs=0;
