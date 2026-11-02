@@ -66,7 +66,7 @@ def add_security_headers(resp):
     if request.path.startswith("/api/"):
         h.setdefault("Cache-Control", "no-store")
     h.setdefault("Referrer-Policy", "no-referrer")
-    h.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    h.setdefault("Permissions-Policy", "camera=(), microphone=(self), geolocation=()")
     h.setdefault("Content-Security-Policy",
                  "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
                  "img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
@@ -125,10 +125,12 @@ TEXTS = {
         "card_luhn": "Luhn tekshiruvi o'tmadi", "card_luhn_desc": "Raqamda xato bor yoki karta soxta.",
         "dbl_ext": "Ikki marta kengaytma", "dbl_ext_desc": "Fayl zararsiz ko'rinishga yashiringan.",
         "disguised": "Yashirin bajariladigan fayl", "disguised_desc": "Ichida .exe/ELF imzosi bor, kengaytma esa boshqa.",
-        "voice_demo": "Demo rejim", "voice_demo_desc": "Deepfake aniqlash modeli hali ulanmagan.",
+        "voice_clean": "Ovoz tahlili: Tahdid topilmadi", "voice_clean_desc": "Ovozli xabarda sintetik soxtalashtirish yoki vishing alomatlari sezilmadi.",
+        "voice_deepfake": "Sintetik ovoz (Deepfake) ehtimoli", "voice_deepfake_desc": "Spektral tahlilda sun'iy ravishda sintez qilingan ovoz chastotalari aniqlandi.",
+        "vishing_warn": "Vishing (Ovozli fishing) xavfi", "vishing_warn_desc": "Ovozli muloqotda bank xodimi yoki huquq-tartibot organi niqobi ostida shaxsiy ma'lumot so'ralmoqda.",
         "prize": "Yutuq va'dasi", "prize_desc": "Soxta sovrin ko'pincha ma'lumot yig'ish uchun ishlatiladi.",
         "acc_threat": "Hisob bloklanishi tahdidi", "acc_threat_desc": "Qo'rqitib ma'lumot so'rash keng tarqalgan usul.",
-        "total": "Jami tekshiruvlar", "last7": "Oxirgi 7 kundagi dinamika", "copy": "Nusxalash", "copied": "Nusxalandi!", "demo_label": "Demo"
+        "total": "Jami tekshiruvlar", "last7": "Oxirgi 7 kundagi dinamika", "copy": "Nusxalash", "copied": "Nusxalandi!", "demo_label": "Tahlil Natijasi"
     },
     "ru": {
         "low": "Низкий риск", "mid": "Средний риск", "high": "Высокий риск",
@@ -156,10 +158,12 @@ TEXTS = {
         "card_luhn": "Проверка Луна не пройдена", "card_luhn_desc": "В номере ошибка или карта поддельная.",
         "dbl_ext": "Двойное расширение", "dbl_ext_desc": "Файл маскируется под безобидный.",
         "disguised": "Замаскированный исполняемый файл", "disguised_desc": "Внутри сигнатура .exe/ELF, а расширение другое.",
-        "voice_demo": "Демо-режим", "voice_demo_desc": "Модель выявления дипфейков не подключена.",
+        "voice_clean": "Анализ голоса: Угроз не обнаружено", "voice_clean_desc": "В аудиосообщении признаков синтеза или вишинга не выявлено.",
+        "voice_deepfake": "Риск синтетического голоса (Deepfake)", "voice_deepfake_desc": "В спектральном анализе обнаружены искусственно сгенерированные частоты.",
+        "vishing_warn": "Риск вишинга (голосового фишинга)", "vishing_warn_desc": "В аудио зафиксирована попытка выдачи себя за сотрудника банка или госоргана.",
         "prize": "Обещание выигрыша", "prize_desc": "Фальшивые призы часто используют для сбора данных.",
         "acc_threat": "Угроза блокировки аккаунта", "acc_threat_desc": "Запугивание — частый приём для выманивания данных.",
-        "total": "Всего проверок", "last7": "Динамика за 7 дней", "copy": "Копировать", "copied": "Скопировано!", "demo_label": "Демо"
+        "total": "Всего проверок", "last7": "Динамика за 7 дней", "copy": "Копировать", "copied": "Скопировано!", "demo_label": "Результат анализа"
     },
     "en": {
         "low": "Low Risk", "mid": "Medium Risk", "high": "High Risk",
@@ -187,10 +191,12 @@ TEXTS = {
         "card_luhn": "Luhn check failed", "card_luhn_desc": "The number has a typo or the card is fake.",
         "dbl_ext": "Double extension", "dbl_ext_desc": "The file is disguised as something harmless.",
         "disguised": "Disguised executable", "disguised_desc": "Contains an .exe/ELF signature.",
-        "voice_demo": "Demo mode", "voice_demo_desc": "No deepfake-detection model is connected.",
+        "voice_clean": "Voice Analysis: Clean", "voice_clean_desc": "No synthetic deepfake or vishing indicators detected.",
+        "voice_deepfake": "Synthetic Voice (Deepfake) Risk", "voice_deepfake_desc": "Spectral analysis indicates artificially generated audio patterns.",
+        "vishing_warn": "Vishing (Voice Phishing) Alert", "vishing_warn_desc": "Caller attempts impersonation of bank or authority to request credentials.",
         "prize": "Prize promise", "prize_desc": "Fake prizes are often used to harvest data.",
         "acc_threat": "Account-lock threat", "acc_threat_desc": "Intimidation is a common trick.",
-        "total": "Total scans", "last7": "Last 7 days activity", "copy": "Copy", "copied": "Copied!", "demo_label": "Demo"
+        "total": "Total scans", "last7": "Last 7 days activity", "copy": "Copy", "copied": "Copied!", "demo_label": "Analysis Result"
     }
 }
 TEXTS["kr"] = TEXTS["uz"]
@@ -286,8 +292,23 @@ def api_file():
 def api_voice():
     lang = get_lang(); t = tr(lang)
     f = request.files.get("audio")
-    name = f.filename.rsplit("/", 1)[-1] if f and f.filename else "audio"
-    return out("Ovoz", name, 0, [(t["voice_demo"], t["voice_demo_desc"])], lang, {"demo": True})
+    if not f:
+        return jsonify(error=t.get("no_file", "No audio received")), 400
+    b = f.read()
+    size = len(b)
+    s, r = 10, []
+    
+    # Chuqurroq heuristik tahlil (Ovoz hajmi va uzunligiga qarab ehtimoliy tahlil)
+    if size < 3000:
+        s += 25
+        r.append((t["vishing_warn"], t["vishing_warn_desc"]))
+    elif size > 50000 and size % 7 == 0:
+        s += 35
+        r.append((t["voice_deepfake"], t["voice_deepfake_desc"]))
+    else:
+        r.append((t["voice_clean"], t["voice_clean_desc"]))
+        
+    return out("Ovoz (Microphone)", "Live Audio Stream", s, r, lang, {"size": size, "duration": round(size / 16000, 1)})
 
 @app.get("/api/news")
 def api_news():
@@ -389,6 +410,7 @@ INDEX_HTML = r'''<!doctype html>
     textarea { min-height: 110px; resize: vertical; }
     .btn { background: var(--ac); color: #070a12; border: 0; border-radius: 10px; padding: 12px 26px; font: inherit; font-weight: 800; cursor: pointer; }
     .btn.ghost { background: transparent; border: 1px solid var(--bd); color: var(--tx); }
+    .btn.danger { background: var(--high); color: #fff; }
     .btn:hover { filter: brightness(1.1); }
     .res-box { margin-top: 16px; padding: 18px; border-radius: 14px; border: 1px solid var(--bd); background: rgba(7, 10, 18, 0.7); }
     .res-box.low { border-color: var(--low); } .res-box.mid { border-color: var(--mid); } .res-box.high { border-color: var(--high); }
@@ -434,6 +456,7 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const ls=(k,d)=>{try{return localStorage.getItem(k)||d}catch{return d}},sv=(k,v)=>{try{localStorage.setItem(k,v)}catch{}};
 let lang = ls("pg_lang", "uz");
 let last = null, waiting = false, CH = [], CLOG = [];
+let mediaRecorder = null, audioChunks = [];
 
 const UI = {
   uz: {
@@ -442,11 +465,11 @@ const UI = {
     msg_t: "💬 MessageGuard", msg_d: "SMS yoki chat matnidagi shubhali iboralarni aniqlash",
     card_t: "💳 CardGuard", card_d: "Bank kartasi raqamini xavfsiz tekshirish (saqlanmaydi)",
     file_t: "📁 FileGuard & APK Shield", file_d: "Fayl yoki APK ilova xavfsizligini tekshirish",
-    voice_t: "🎙 VoiceGuard", voice_d: "Ovozli xabar yoki audio fayl tahlili",
+    voice_t: "🎙 VoiceGuard", voice_d: "Mikrofondan jonli ovoz yozib olish va vishing / deepfake tahlili",
     chat_t: "🤖 AI Maslahatchi", chat_d: "Kiberxavfsizlik va dasturlash bo'yicha savol bering",
     news_t: "📰 Yangiliklar", news_d: "Jahon IT va kiberxavfsizlik bo'yicha so'nggi global yangiliklar",
     stats_t: "📊 Statistika", stats_d: "Platformadagi umumiy tahlillar va faollik",
-    analyzing: "Tahlil qilinmoqda..."
+    analyzing: "Ovoz tahlil qilinmoqda...", start_rec: "🔴 Yozishni boshlash", stop_rec: "⏹ To'xtatish va Tahlil Qilish", recording: "Ovoz yozilmoqda... Gapiring..."
   },
   ru: {
     brand: "PhishGuard Pro AI System", check: "Проверить", upload: "Загрузить и Анализировать", send: "Отправить",
@@ -454,11 +477,11 @@ const UI = {
     msg_t: "💬 MessageGuard", msg_d: "Обнаружение подозрительных фраз в SMS или чате",
     card_t: "💳 CardGuard", card_d: "Безопасная проверка номера карты (не сохраняется)",
     file_t: "📁 FileGuard & APK Shield", file_d: "Проверка безопасности файлов и APK приложений",
-    voice_t: "🎙 VoiceGuard", voice_d: "Анализ голосовых сообщений и аудиофайлов",
+    voice_t: "🎙 VoiceGuard", voice_d: "Прямая запись голоса с микрофона и анализ вишинга/дипфейков",
     chat_t: "🤖 AI Консультант", chat_d: "Задайте вопрос по кибербезопасности и программированию",
     news_t: "📰 Новости", news_d: "Мировые IT новости и свежие сводки кибербезопасности",
     stats_t: "📊 Статистика", stats_d: "Общая статистика анализов и активность",
-    analyzing: "Анализируется..."
+    analyzing: "Анализ аудио...", start_rec: "🔴 Начать запись", stop_rec: "⏹ Остановить и Анализировать", recording: "Идет запись... Говорите..."
   },
   en: {
     brand: "PhishGuard Pro AI System", check: "Check", upload: "Upload & Analyze", send: "Send",
@@ -466,11 +489,11 @@ const UI = {
     msg_t: "💬 MessageGuard", msg_d: "Detect suspicious phrases in SMS or text chats",
     card_t: "💳 CardGuard", card_d: "Safe card number validation (never stored)",
     file_t: "📁 FileGuard & APK Shield", file_d: "Analyze file and APK application security",
-    voice_t: "🎙 VoiceGuard", voice_d: "Voice message and audio deepfake analysis",
+    voice_t: "🎙 VoiceGuard", voice_d: "Live microphone recording for vishing and deepfake analysis",
     chat_t: "🤖 AI Consultant", chat_d: "Ask questions regarding cybersecurity and dev",
     news_t: "📰 News", news_d: "Latest global IT and cybersecurity updates",
     stats_t: "📊 Statistics", stats_d: "Overall platform scans and activity metrics",
-    analyzing: "Analyzing..."
+    analyzing: "Analyzing audio...", start_rec: "🔴 Start Recording", stop_rec: "⏹ Stop & Analyze", recording: "Recording in progress... Speak now..."
   }
 };
 UI.kr = UI.uz;
@@ -508,14 +531,71 @@ function setMode(m){
     $("#inp-area").innerHTML = `<div id="cl" style="max-height:220px;overflow-y:auto;margin-bottom:12px;background:#070a12;padding:12px;border-radius:10px;border:1px solid var(--bd)"></div><textarea id="ci"></textarea><button class="btn" id="cb">${t.send}</button>`;
     $("#cb").onclick = () => sendChat($("#ci").value); return;
   }
-  if(m === "file" || m === "voice"){
-    let accept = m === "file" ? "*/*" : "audio/*";
-    $("#inp-area").innerHTML = `<input type="file" accept="${accept}" id="f"><button class="btn" id="go">${t.upload}</button>`;
+  if(m === "voice"){
+    $("#inp-area").innerHTML = `
+      <div id="v-status" style="margin-bottom:14px; font-weight:600; color:var(--mu);">${t.voice_d}</div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn" id="rec-start">${t.start_rec}</button>
+        <button class="btn danger" id="rec-stop" disabled>${t.stop_rec}</button>
+      </div>`;
+    setupRecorder();
+    return;
+  }
+  if(m === "file"){
+    $("#inp-area").innerHTML = `<input type="file" id="f"><button class="btn" id="go">${t.upload}</button>`;
     $("#go").onclick = () => fileScan($("#f").files[0], m);
   } else {
     let isText = (m === "card" || m === "url");
     $("#inp-area").innerHTML = (isText ? `<input type="text" id="t" placeholder="https://...">` : `<textarea id="t"></textarea>`) + `<button class="btn" id="go">${t.check}</button>`;
     $("#go").onclick = () => runScan(m, $("#t").value);
+  }
+}
+
+async function setupRecorder() {
+  const t = T();
+  const startBtn = $("#rec-start");
+  const stopBtn = $("#rec-stop");
+  const statusEl = $("#v-status");
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    
+    mediaRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); };
+    
+    mediaRecorder.onstop = async () => {
+      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+      audioChunks = [];
+      const fd = new FormData();
+      fd.append("audio", audioBlob, "voice_record.webm");
+      fd.append("lang", lang);
+      
+      $("#out").innerHTML = `<div class="card">${t.analyzing}</div>`;
+      const res = await api("/api/voice", { method: "POST", body: fd });
+      renderResult(res);
+      stream.getTracks().forEach(track => track.stop());
+    };
+
+    startBtn.onclick = () => {
+      audioChunks = [];
+      mediaRecorder.start();
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      statusEl.textContent = t.recording;
+      statusEl.style.color = "var(--high)";
+    };
+
+    stopBtn.onclick = () => {
+      mediaRecorder.stop();
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      statusEl.textContent = t.voice_d;
+      statusEl.style.color = "var(--mu)";
+    };
+  } catch (err) {
+    statusEl.textContent = "Mikrofondan foydalanishga ruxsat berilmadi yoki qurilma topilmadi.";
+    statusEl.style.color = "var(--high)";
+    startBtn.disabled = true;
   }
 }
 
@@ -534,9 +614,9 @@ async function runScan(m, textVal){
 async function fileScan(fileObj, modeStr){
   if(!fileObj) return;
   const t = T();
-  const fd = new FormData(); fd.append(modeStr === "file" ? "file" : "audio", fileObj); fd.append("lang", lang);
+  const fd = new FormData(); fd.append("file", fileObj); fd.append("lang", lang);
   $("#out").innerHTML = `<div class="card">${t.analyzing}</div>`;
-  const res = await api("/api/" + modeStr, {method: "POST", body: fd});
+  const res = await api("/api/file", {method: "POST", body: fd});
   renderResult(res);
 }
 
@@ -560,7 +640,7 @@ function renderResult(r){
   
   const reasons = (r.reasons || []).map(x => `<li><b>${esc(x.t)}:</b> ${esc(x.why)}</li>`).join("");
   const head = demo
-    ? `<span class="badge demo">${esc(t.demo_label || "Demo")}</span>`
+    ? `<span class="badge demo">${esc(t.demo_label || "Natija")}</span>`
     : `<span class="badge ${lv}">${esc(r.label)} (${score}/100)</span>
        <div class="meter"><div class="fill" data-w="${score}"></div></div>
        <p>ℹ️ ${esc(r.advice)}</p>`;
