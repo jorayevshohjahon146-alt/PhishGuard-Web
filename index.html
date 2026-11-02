@@ -6,33 +6,40 @@
   <title>PhishGuard Pro AI — Cyber Ecosystem</title>
   <style>
     :root {
-      --bg: #0f172a;
-      --card: #1e293b;
-      --bd: #334155;
+      --bg: #070a12;
+      --card: #0f172a;
+      --bd: #1e293b;
       --tx: #f8fafc;
       --mu: #94a3b8;
       --ac: #38bdf8;
-      --ac-hover: #0284c7;
+      --ac-glow: rgba(56, 189, 248, 0.25);
       --low: #10b981;
       --mid: #f59e0b;
       --high: #ef4444;
-      --glow: rgba(56, 189, 248, 0.15);
     }
 
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: var(--bg);
       color: var(--tx);
       font: 14px/1.6 'Inter', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      background-color: var(--bg);
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
+        linear-gradient(rgba(30, 41, 59, 0.2) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(30, 41, 59, 0.2) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
+      background-attachment: fixed;
       padding-bottom: 60px;
     }
 
     header {
-      background: rgba(30, 41, 59, 0.8);
+      background: rgba(15, 23, 42, 0.85);
       backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--bd);
-      padding: 16px 28px;
+      padding: 14px 28px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -46,17 +53,16 @@
       align-items: center;
       gap: 12px;
       font-weight: 800;
-      font-size: 18px;
+      font-size: 17px;
       letter-spacing: 0.5px;
-      color: var(--tx);
     }
 
-    .brand-icon {
-      width: 14px;
-      height: 14px;
+    .brand-pulse {
+      width: 10px;
+      height: 10px;
       background: var(--ac);
       border-radius: 50%;
-      box-shadow: 0 0 12px var(--ac);
+      box-shadow: 0 0 10px var(--ac);
       animation: pulse 2s infinite;
     }
 
@@ -68,14 +74,14 @@
 
     .lang-select {
       border: 1px solid var(--bd);
-      background: #0f172a;
+      background: #070a12;
       color: var(--tx);
       padding: 8px 14px;
       border-radius: 10px;
       font-weight: 600;
-      cursor: pointer;
       outline: none;
-      transition: all 0.2s;
+      cursor: pointer;
+      transition: border-color 0.2s;
     }
     .lang-select:hover { border-color: var(--ac); }
 
@@ -83,45 +89,48 @@
 
     .nav-tabs {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       background: var(--card);
-      padding: 8px;
+      padding: 6px;
       border: 1px solid var(--bd);
-      border-radius: 16px;
+      border-radius: 14px;
       margin-bottom: 24px;
       overflow-x: auto;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+      -webkit-overflow-scrolling: touch;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
     }
+    .nav-tabs::-webkit-scrollbar { height: 4px; }
+    .nav-tabs::-webkit-scrollbar-thumb { background: var(--bd); border-radius: 4px; }
 
     .nav-tabs button {
       flex: 1;
       background: transparent;
       border: 0;
-      padding: 12px 18px;
+      padding: 10px 16px;
       font: inherit;
       font-weight: 600;
       color: var(--mu);
       cursor: pointer;
       border-radius: 10px;
       white-space: nowrap;
-      transition: all 0.25s ease;
+      transition: all 0.2s;
     }
 
-    .nav-tabs button:hover { color: var(--tx); background: rgba(255,255,255,0.05); }
+    .nav-tabs button:hover { color: var(--tx); background: rgba(255,255,255,0.04); }
 
     .nav-tabs button.on {
       background: var(--ac);
-      color: #0f172a;
-      font-weight: 700;
-      box-shadow: 0 0 16px var(--glow);
+      color: #070a12;
+      font-weight: 800;
+      box-shadow: 0 0 16px var(--ac-glow);
     }
 
     .card {
       background: var(--card);
       border: 1px solid var(--bd);
-      border-radius: 20px;
+      border-radius: 18px;
       padding: 28px;
-      box-shadow: 0 12px 32px rgba(0,0,0,0.25);
+      box-shadow: 0 12px 35px rgba(0,0,0,0.4);
       margin-bottom: 24px;
       position: relative;
       overflow: hidden;
@@ -135,8 +144,8 @@
       background: linear-gradient(90deg, transparent, var(--ac), transparent);
     }
 
-    h2 { margin: 0 0 8px; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
-    p { margin: 4px 0 20px; color: var(--mu); font-size: 14px; }
+    h2 { margin: 0 0 6px; font-size: 19px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+    p { margin: 4px 0 18px; color: var(--mu); font-size: 13.5px; }
 
     textarea, input[type=file], input[type=text] {
       width: 100%;
@@ -145,72 +154,67 @@
       padding: 14px;
       font: inherit;
       outline: none;
-      background: #0f172a;
+      background: #070a12;
       color: var(--tx);
-      margin-bottom: 16px;
+      margin-bottom: 14px;
       transition: border-color 0.2s, box-shadow 0.2s;
     }
 
     textarea:focus, input:focus {
       border-color: var(--ac);
-      box-shadow: 0 0 12px var(--glow);
+      box-shadow: 0 0 12px var(--ac-glow);
     }
 
-    textarea { min-height: 120px; resize: vertical; }
+    textarea { min-height: 110px; resize: vertical; }
 
     .btn {
       background: var(--ac);
-      color: #0f172a;
+      color: #070a12;
       border: 0;
-      border-radius: 12px;
-      padding: 14px 28px;
+      border-radius: 10px;
+      padding: 12px 26px;
       font: inherit;
-      font-weight: 700;
+      font-weight: 800;
       cursor: pointer;
       transition: all 0.2s;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
     }
-
-    .btn:hover { background: var(--ac-hover); color: #fff; transform: translateY(-1px); }
+    .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
 
     .res-box {
-      margin-top: 20px;
-      padding: 20px;
+      margin-top: 16px;
+      padding: 18px;
       border-radius: 14px;
       border: 1px solid var(--bd);
-      background: rgba(15, 23, 42, 0.6);
+      background: rgba(7, 10, 18, 0.7);
     }
 
-    .res-box.low { border-color: var(--low); box-shadow: 0 0 15px rgba(16, 185, 129, 0.15); }
-    .res-box.mid { border-color: var(--mid); box-shadow: 0 0 15px rgba(245, 158, 11, 0.15); }
-    .res-box.high { border-color: var(--high); box-shadow: 0 0 15px rgba(239, 68, 68, 0.15); }
+    .res-box.low { border-color: var(--low); box-shadow: 0 0 16px rgba(16, 185, 129, 0.15); }
+    .res-box.mid { border-color: var(--mid); box-shadow: 0 0 16px rgba(245, 158, 11, 0.15); }
+    .res-box.high { border-color: var(--high); box-shadow: 0 0 16px rgba(239, 68, 68, 0.15); }
 
     .badge {
       display: inline-block;
-      padding: 6px 14px;
+      padding: 5px 14px;
       border-radius: 30px;
       font-weight: 800;
-      font-size: 12px;
-      margin-bottom: 12px;
+      font-size: 11px;
+      margin-bottom: 10px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
-
     .badge.low { background: var(--low); color: #000; }
     .badge.mid { background: var(--mid); color: #000; }
     .badge.high { background: var(--high); color: #fff; }
 
-    ul { margin: 12px 0 0 20px; padding: 0; }
-    li { margin-bottom: 8px; font-size: 13.5px; color: #cbd5e1; }
+    ul { margin: 10px 0 0 18px; padding: 0; }
+    li { margin-bottom: 6px; font-size: 13px; color: #d1d5db; }
     li b { color: var(--tx); }
   </style>
 </head>
 <body>
 <header>
   <div class="brand">
-    <div class="brand-icon"></div>
+    <div class="brand-pulse"></div>
     <span id="header-title">PhishGuard Pro AI</span>
   </div>
   <select class="lang-select" id="langSelect">
@@ -218,7 +222,6 @@
     <option value="kr">🇺🇿 Ўзбек</option>
     <option value="ru">🇷🇺 Русский</option>
     <option value="en">🇬🇧 English</option>
-    <option value="tr">🇹🇷 Türkçe</option>
   </select>
 </header>
 <main>
@@ -230,5 +233,187 @@
   </div>
   <div id="out"></div>
 </main>
+
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const ls=(k,d)=>{try{return localStorage.getItem(k)||d}catch{return d}},sv=(k,v)=>{try{localStorage.setItem(k,v)}catch{}};
+
+let lang = ls("pg_lang", "uz");
+
+const UI = {
+  uz: {
+    brand: "PhishGuard Pro AI System", check: "Tekshirish", upload: "Yuklab Tahlil Qilish", send: "Yuborish",
+    url_t: "🔗 URL Scanner", url_d: "Havolani xavfsizlik va fishing alomatlariga tekshirish",
+    msg_t: "💬 MessageGuard", msg_d: "SMS yoki chat matnidagi shubhali iboralarni aniqlash",
+    card_t: "💳 CardGuard", card_d: "Bank kartasi raqamini xavfsiz tekshirish (saqlanmaydi)",
+    file_t: "📁 FileGuard & APK Shield", file_d: "Fayl yoki APK ilova xavfsizligini tekshirish",
+    voice_t: "🎙 VoiceGuard", voice_d: "Ovozli xabar yoki audio fayl tahlili",
+    chat_t: "🤖 AI Maslahatchi", chat_d: "Kiberxavfsizlik va dasturlash bo'yicha savol bering",
+    news_t: "📰 Yangiliklar", news_d: "Kiberxavfsizlik va IT sohasidagi so'nggi yangiliklar",
+    analyzing: "Tahlil qilinmoqda..."
+  },
+  kr: {
+    brand: "PhishGuard Pro AI Екотизими", check: "Текшириш", upload: "Юклаб Таҳлил Қилиш", send: "Юбориш",
+    url_t: "🔗 URL Scanner", url_d: "Ҳаволани хавфсизлик ва фишинг аломатларига текшириш",
+    msg_t: "💬 MessageGuard", msg_d: "SMS ёки чат матнидаги шубҳали ибораларни аниқлаш",
+    card_t: "💳 CardGuard", card_d: "Банк картаси рақамини хавфсиз текшириш (сақланмайди)",
+    file_t: "📁 FileGuard & APK Shield", file_d: "Файл ёки APK илова хавфсизлигини текшириш",
+    voice_t: "🎙 VoiceGuard", voice_d: "Овозли хабар ёки аудио файл таҳлили",
+    chat_t: "🤖 AI Маслаҳатчи", chat_d: "Киберхавфсизлик ва дастурлаш бўйича савол беринг",
+    news_t: "📰 Янгиликлар", news_d: "Киберхавфсизлик ва ИТ соҳасидаги сўнгги янгиликлар",
+    analyzing: "Таҳлил қилинмоқда..."
+  },
+  ru: {
+    brand: "PhishGuard Pro AI System", check: "Проверить", upload: "Загрузить и Анализировать", send: "Отправить",
+    url_t: "🔗 URL Scanner", url_d: "Проверка ссылки на безопасность и признаки фишинга",
+    msg_t: "💬 MessageGuard", msg_d: "Обнаружение подозрительных фраз в SMS или чате",
+    card_t: "💳 CardGuard", card_d: "Безопасная проверка номера карты (не сохраняется)",
+    file_t: "📁 FileGuard & APK Shield", file_d: "Проверка безопасности файлов и APK приложений",
+    voice_t: "🎙 VoiceGuard", voice_d: "Анализ голосовых сообщений и аудиофайлов",
+    chat_t: "🤖 AI Консультант", chat_d: "Задайте вопрос по кибербезопасности и программированию",
+    news_t: "📰 Новости", news_d: "Последние новости в сфере ИТ и кибербезопасности",
+    analyzing: "Анализируется..."
+  },
+  en: {
+    brand: "PhishGuard Pro AI System", check: "Check", upload: "Upload & Analyze", send: "Send",
+    url_t: "🔗 URL Scanner", url_d: "Scan link for safety and phishing indicators",
+    msg_t: "💬 MessageGuard", msg_d: "Detect suspicious phrases in SMS or text chats",
+    card_t: "💳 CardGuard", card_d: "Safe card number validation (never stored)",
+    file_t: "📁 FileGuard & APK Shield", file_d: "Analyze file and APK application security",
+    voice_t: "🎙 VoiceGuard", voice_d: "Voice message and audio deepfake analysis",
+    chat_t: "🤖 AI Consultant", chat_d: "Ask questions regarding cybersecurity and dev",
+    news_t: "📰 News", news_d: "Latest news in IT and cybersecurity domain",
+    analyzing: "Analyzing..."
+  }
+};
+
+const MODES = ["url", "message", "card", "file", "voice", "chat", "news"];
+let cur = "url";
+
+const langSelect = $("#langSelect");
+langSelect.value = lang;
+langSelect.onchange = () => {
+  lang = langSelect.value;
+  sv("pg_lang", lang);
+  updateUI();
+};
+
+function updateUI(){
+  const t = UI[lang] || UI["uz"];
+  $("#header-title").textContent = t.brand;
+  renderTabs();
+  setMode(cur);
+}
+
+function renderTabs(){
+  const t = UI[lang] || UI["uz"];
+  $("#tabs").innerHTML = MODES.map(k=>`<button class="${k===cur?'on':''}" data-m="${k}">${t[k+'_t']}</button>`).join("");
+  $$("#tabs button").forEach(b=>b.onclick=()=>setMode(b.dataset.m));
+}
+
+function setMode(m){
+  cur = m;
+  const t = UI[lang] || UI["uz"];
+  renderTabs();
+  $("#card-title").textContent = t[m+'_t'];
+  $("#card-desc").textContent = t[m+'_d'];
+  $("#out").innerHTML = "";
+
+  if(m === "news"){
+    $("#inp-area").innerHTML = "";
+    loadNews();
+    return;
+  }
+  if(m === "chat"){
+    $("#inp-area").innerHTML = `<div id="cl" style="max-height:220px;overflow-y:auto;margin-bottom:12px;background:#070a12;padding:12px;border-radius:10px;border:1px solid var(--bd)"></div><textarea id="ci"></textarea><button class="btn" id="cb">${t.send}</button>`;
+    $("#cb").onclick = () => sendChat($("#ci").value);
+    return;
+  }
+  if(m === "file" || m === "voice"){
+    let accept = m === "file" ? "*/*" : "audio/*";
+    $("#inp-area").innerHTML = `<input type="file" accept="${accept}" id="f"><button class="btn" id="go">${t.upload}</button>`;
+    $("#go").onclick = () => fileScan($("#f").files[0], m);
+  } else {
+    let isText = (m === "card" || m === "url");
+    let inputHtml = isText ? `<input type="text" id="t" placeholder="https://...">` : `<textarea id="t"></textarea>`;
+    $("#inp-area").innerHTML = `${inputHtml}<button class="btn" id="go">${t.check}</button>`;
+    $("#go").onclick = () => runScan(m, $("#t").value);
+  }
+}
+
+async function runScan(m, textVal){
+  if(!textVal.trim()) return;
+  const t = UI[lang] || UI["uz"];
+  $("#out").innerHTML = `<div class="card">${t.analyzing}</div>`;
+  try{
+    const res = await fetch("/api/" + m, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({text: textVal, lang: lang})
+    }).then(r=>r.json());
+    renderResult(res);
+  }catch{
+    $("#out").innerHTML = `<div class="card" style="color:red">Error</div>`;
+  }
+}
+
+async function fileScan(fileObj, modeStr){
+  if(!fileObj) return;
+  const t = UI[lang] || UI["uz"];
+  const fd = new FormData();
+  fd.append(modeStr === "file" ? "file" : "audio", fileObj);
+  fd.append("lang", lang);
+  $("#out").innerHTML = `<div class="card">${t.analyzing}</div>`;
+  try{
+    const res = await fetch("/api/" + modeStr, {method: "POST", body: fd}).then(r=>r.json());
+    renderResult(res);
+  }catch{
+    $("#out").innerHTML = `<div class="card" style="color:red">Error</div>`;
+  }
+}
+
+let CH = [];
+async function sendChat(tVal){
+  if(!tVal.trim()) return;
+  CH.push({role: "user", content: tVal});
+  $("#ci").value = "";
+  $("#cl").innerHTML = CH.map(x=>`<div style="margin-bottom:6px"><b>${x.role}:</b> ${x.content}</div>`).join("");
+  try{
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({messages: CH, lang: lang})
+    }).then(r=>r.json());
+    CH.push({role: "assistant", content: res.text || res.error});
+    $("#cl").innerHTML = CH.map(x=>`<div style="margin-bottom:6px"><b>${x.role}:</b> ${x.content}</div>`).join("");
+  }catch{
+    CH.push({role: "assistant", content: "Error"});
+  }
+}
+
+function renderResult(r){
+  if(r.error) { $("#out").innerHTML = `<div class="card">${r.error}</div>`; return; }
+  let extra = r.masked ? `<p><b>Brand:</b> ${r.brand} | ${r.masked}</p>` : "";
+  let reasons = (r.reasons||[]).map(x=>`<li><b>${x.t}:</b> ${x.why}</li>`).join("");
+  $("#out").innerHTML = `<div class="card res-box ${r.level}"><div class="badge ${r.level}">${r.label} (${r.score}/100)</div><p><b>Xulosa:</b> ${r.advice}</p>${extra}<ul>${reasons}</ul></div>`;
+}
+
+async function loadNews(){
+  try{
+    const res = await fetch("/api/news").then(r=>r.json());
+    $("#inp-area").innerHTML = res.map(n=>`
+      <div style="border-bottom:1px solid var(--bd);padding-bottom:10px;margin-bottom:10px">
+        <div style="font-size:11px;color:var(--ac);font-weight:600">${n.date} &bull; ${n.category}</div>
+        <div style="font-size:15px;font-weight:700;margin:2px 0">${n.title}</div>
+        <p style="margin:0">${n.content}</p>
+      </div>
+    `).join("");
+  }catch{
+    $("#inp-area").innerHTML = "Failed to load news.";
+  }
+}
+
+updateUI();
+</script>
 </body>
 </html>
