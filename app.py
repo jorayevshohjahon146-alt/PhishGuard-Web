@@ -292,8 +292,30 @@ def api_voice():
 @app.get("/api/news")
 def api_news():
     return jsonify([
-        {"date": "2026-10-24", "title": "OpenSSL Critical Vulnerability", "category": "Cybersecurity", "content": "Network administrators must patch systems immediately."},
-        {"date": "2026-10-23", "title": "Python 3.15 Released", "category": "Programming", "content": "New JIT compiler improvements and memory optimizations added."}
+        {
+            "date": "2026-11-02",
+            "title": "OpenAI Announces GPT-6 Architecture with Enhanced Zero-Day Threat Detection",
+            "category": "Artificial Intelligence",
+            "content": "OpenAI has unveiled its latest AI model, featuring native security auditing capabilities designed to identify software vulnerabilities before deployment."
+        },
+        {
+            "date": "2026-11-01",
+            "title": "Major Zero-Day Flaw Discovered in Popular Cloud Infrastructure Services",
+            "category": "Cybersecurity",
+            "content": "Security researchers have identified a critical remote code execution vulnerability affecting multi-cloud environments, urging immediate patching."
+        },
+        {
+            "date": "2026-10-30",
+            "title": "Apple & Google Release Unified Protocol Against Advanced Phishing Vectors",
+            "category": "Mobile Security",
+            "content": "Tech giants join forces to deploy hardware-level credential protection to prevent sophisticated SMS and QR-code phishing (quishing) attacks."
+        },
+        {
+            "date": "2026-10-28",
+            "title": "Python 3.15 Focuses on Strict Memory Safety and Automated Cryptography",
+            "category": "Programming",
+            "content": "The Python core team highlights new built-in cryptographic hardening features and memory safety protocols in the latest release candidate."
+        }
     ])
 
 @app.get("/api/stats")
@@ -380,9 +402,9 @@ INDEX_HTML = r'''<!doctype html>
     .bar .lbl { width: 50px; color: var(--mu); }
     .bar .track { flex: 1; background: var(--bd); height: 8px; border-radius: 4px; overflow: hidden; }
     .bar .track i { display: block; background: var(--ac); height: 100%; width: 0; }
-    .news { border-bottom: 1px solid var(--bd); padding-bottom: 10px; margin-bottom: 10px; }
+    .news { border-bottom: 1px solid var(--bd); padding-bottom: 12px; margin-bottom: 12px; }
     .news small { color: var(--ac); font-weight: 600; }
-    .news b { display: block; font-size: 15px; margin: 2px 0; }
+    .news b { display: block; font-size: 15px; margin: 4px 0; color: var(--tx); }
   </style>
 </head>
 <body>
@@ -422,7 +444,7 @@ const UI = {
     file_t: "📁 FileGuard & APK Shield", file_d: "Fayl yoki APK ilova xavfsizligini tekshirish",
     voice_t: "🎙 VoiceGuard", voice_d: "Ovozli xabar yoki audio fayl tahlili",
     chat_t: "🤖 AI Maslahatchi", chat_d: "Kiberxavfsizlik va dasturlash bo'yicha savol bering",
-    news_t: "📰 Yangiliklar", news_d: "Kiberxavfsizlik va IT sohasidagi so'nggi yangiliklar",
+    news_t: "📰 Yangiliklar", news_d: "Jahon IT va kiberxavfsizlik bo'yicha so'nggi global yangiliklar",
     stats_t: "📊 Statistika", stats_d: "Platformadagi umumiy tahlillar va faollik",
     analyzing: "Tahlil qilinmoqda..."
   },
@@ -434,7 +456,7 @@ const UI = {
     file_t: "📁 FileGuard & APK Shield", file_d: "Проверка безопасности файлов и APK приложений",
     voice_t: "🎙 VoiceGuard", voice_d: "Анализ голосовых сообщений и аудиофайлов",
     chat_t: "🤖 AI Консультант", chat_d: "Задайте вопрос по кибербезопасности и программированию",
-    news_t: "📰 Новости", news_d: "Последние новости в сфере ИТ и кибербезопасности",
+    news_t: "📰 Новости", news_d: "Мировые IT новости и свежие сводки кибербезопасности",
     stats_t: "📊 Статистика", stats_d: "Общая статистика анализов и активность",
     analyzing: "Анализируется..."
   },
@@ -446,7 +468,7 @@ const UI = {
     file_t: "📁 FileGuard & APK Shield", file_d: "Analyze file and APK application security",
     voice_t: "🎙 VoiceGuard", voice_d: "Voice message and audio deepfake analysis",
     chat_t: "🤖 AI Consultant", chat_d: "Ask questions regarding cybersecurity and dev",
-    news_t: "📰 News", news_d: "Latest news in IT and cybersecurity domain",
+    news_t: "📰 News", news_d: "Latest global IT and cybersecurity updates",
     stats_t: "📊 Statistics", stats_d: "Overall platform scans and activity metrics",
     analyzing: "Analyzing..."
   }
