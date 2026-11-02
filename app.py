@@ -101,102 +101,90 @@ def throttle():
 TEXTS = {
     "uz": {
         "low": "Past xavf", "mid": "O'rta xavf", "high": "Yuqori xavf",
-        "adv_low": "Aniq xavf belgisi topilmadi, lekin ehtiyot bo'ling.",
-        "adv_mid": "Shubhali belgilar bor. Ma'lumot kiritmang.",
-        "adv_high": "Diqqat! Bu fishing yoki xavfli tahdid bo'lishi mumkin. Ochmang!",
-        "invalid_url": "URL tushunarsiz", "invalid_url_desc": "Manzil noto'g'ri yozilgan.",
-        "no_https": "HTTPS yo'q", "no_https_desc": "Ma'lumot shifrlanmagan.",
-        "imitation": "'{}' brendiga taqlid", "imitation_desc": "Rasmiy domen: {}",
-        "safe": "Xavfsiz ko'rinadi", "safe_desc": "Aniq fishing belgisi aniqlanmadi.",
-        "urgency": "Shoshiltirish", "urgency_desc": "Firibgarlar vaqt bermasdan harakat qilishga majburlaydi.",
-        "secret_req": "Maxfiy ma'lumot so'rovi", "secret_req_desc": "Bank hech qachon SMS kod yoki parolni so'ramaydi.",
-        "no_msg_threat": "Belgilar topilmadi", "no_msg_threat_desc": "Shubhali iboralar aniqlanmadi.",
-        "card_len": "Raqam to'liq emas", "card_len_desc": "13-19 xonali karta raqamini kiriting.",
-        "card_note": "Eslatma", "card_note_desc": "Karta raqami xavfsizlik uchun saqlanmaydi.",
-        "bad_ext": "Xavfli kengaytma: .{}", "bad_ext_desc": "Bajariladigan yoki shubhali fayl turi.",
-        "perm_warn": "Ruxsat: {}", "perm_warn_desc": "Bu ruxsat xavfli APK ilovalarda suiiste'mol qilinadi.",
-        "file_clean": "Fayl tozaga o'xshaydi", "file_clean_desc": "Aniq zararli imzo topilmadi.",
-        "ip_host": "IP manzil", "ip_host_desc": "Havola domen o'rniga to'g'ridan-to'g'ri IP manzilga olib boradi.",
-        "punycode": "Punycode (xn--)", "punycode_desc": "Harflari o'xshash soxta domen bo'lishi mumkin.",
-        "at_sign": "'@' belgisi", "at_sign_desc": "Haqiqiy manzil '@' dan keyin yashiringan bo'lishi mumkin.",
-        "many_sub": "Ko'p subdomen", "many_sub_desc": "Uzun subdomen zanjiri firibgarlikda ko'p uchraydi.",
-        "bad_tld": "Shubhali domen zonasi", "bad_tld_desc": "Bu zonalar fishing uchun ko'p ishlatiladi.",
-        "shortener": "Qisqartirilgan havola", "shortener_desc": "Haqiqiy manzil yashirin; ochishdan oldin tekshiring.",
-        "card_luhn": "Luhn tekshiruvi o'tmadi", "card_luhn_desc": "Raqamda xato bor yoki karta soxta.",
-        "dbl_ext": "Ikki marta kengaytma", "dbl_ext_desc": "Fayl zararsiz ko'rinishga yashiringan.",
-        "disguised": "Yashirin bajariladigan fayl", "disguised_desc": "Ichida .exe/ELF imzosi bor, kengaytma esa boshqa.",
-        "voice_clean": "Ovoz tahlili: Tahdid topilmadi", "voice_clean_desc": "Ovozli xabarda sintetik soxtalashtirish yoki vishing alomatlari sezilmadi.",
-        "voice_deepfake": "Sintetik ovoz (Deepfake) ehtimoli", "voice_deepfake_desc": "Spektral tahlilda sun'iy ravishda sintez qilingan ovoz chastotalari aniqlandi.",
-        "vishing_warn": "Vishing (Ovozli fishing) xavfi", "vishing_warn_desc": "Ovozli muloqotda bank xodimi yoki huquq-tartibot organi niqobi ostida shaxsiy ma'lumot so'ralmoqda.",
-        "prize": "Yutuq va'dasi", "prize_desc": "Soxta sovrin ko'pincha ma'lumot yig'ish uchun ishlatiladi.",
-        "acc_threat": "Hisob bloklanishi tahdidi", "acc_threat_desc": "Qo'rqitib ma'lumot so'rash keng tarqalgan usul.",
-        "total": "Jami tekshiruvlar", "last7": "Oxirgi 7 kundagi dinamika", "copy": "Nusxalash", "copied": "Nusxalandi!", "demo_label": "Tahlil Natijasi"
+        "adv_low": "Aniq xavf belgisi topilmadi, lekin har doim hushyor bo'ling.",
+        "adv_mid": "Shubhali belgilar aniqlandi. Shaxsiy ma'lumot kiritmang va havolani ochmang.",
+        "adv_high": "DIQQAT! Bu xavfli fishing yoki kiberhujum vositasi. Darhol tark eting!",
+        "invalid_url": "URL manzil xato", "invalid_url_desc": "Kiritilgan manzil formati noto'g'ri tuzilgan.",
+        "no_https": "Shifrlanmagan ulanish (HTTP)", "no_https_desc": "Ma'lumotlar ochiq holda uzatiladi, bu trafikni tutib qolish xavfini tug'diradi.",
+        "imitation": "'{}' brendiga taqlid", "imitation_desc": "Rasmiy domen: {}. Bu soxta sahifa bo'lishi mumkin.",
+        "ip_host": "IP manzil aniqlandi", "ip_host_desc": "Havola to'g'ridan-to'g'ri IP manzilga yo'naltirilgan, bu fishing saytlarga xos.",
+        "punycode": "Punycode (xn--) alomati", "punycode_desc": "Domen nomi xalqaro harflarga o'xshatib soxtalashtirilgan bo'lishi mumkin.",
+        "at_sign": "Yashirin '@' belgisi", "at_sign_desc": "Havoladagi '@' belgisi brauzerni chalg'itib, boshqa manzilga olib borishi mumkin.",
+        "many_sub": "Haddan tashqari ko'p subdomen", "sub_desc": "Ko'p qavatli subdomenlar soxta saytlarni niqoblash uchun ishlatiladi.",
+        "bad_tld": "Shubhali domen zonasi", "bad_tld_desc": "Bu TLD (zona) arzon yoki bepul bo'lgani uchun firibgarlar tomonidan ko'p suiiste'mol qilinadi.",
+        "shortener": "Qisqartirilgan havola", "shortener_desc": "Asl manzil yashiringan. Uni ochishdan oldin kengaytirib tekshiring.",
+        "safe": "Xavfsiz ko'rinadi", "safe_desc": "Tahlil qilingan URL manzilida aniq tahdidlar topilmadi.",
+        "urgency": "Shoshiltirish va bosim o'tkazish", "urgency_desc": "Firibgarlar jabrlanuvchini o'ylashga vaqt bermasdan harakat qilishga majburlaydi.",
+        "secret_req": "Maxfiy ma'lumot (OTP/Parol) so'rovi", "secret_req_desc": "Banklar va rasmiy xizmatlar hech qachon SMS kod, PIN yoki parolni so'ramaydi.",
+        "prize": "Soxta yutuq va sovg'a va'dasi", "prize_desc": "Tez boyib ketish yoki yutuqni olish bahona shaxsiy ma'lumot yig'iladi.",
+        "acc_threat": "Hisobni bloklash bilan qo'rqitish", "acc_threat_desc": "Hisobingiz o'chirilishi yoki bloklanishi haqidagi xabarlar soxta vahima uyg'otishga qaratilgan.",
+        "no_msg_threat": "Matnda tahdid topilmadi", "no_msg_threat_desc": "Xabarda shubhali iboralar aniqlanmadi.",
+        "card_len": "Karta raqami noto'g'ri", "card_len_desc": "13 dan 19 gacha bo'lgan to'g'ri raqam kiriting.",
+        "card_note": "Xavfsizlik eslatmasi", "card_note_desc": "Karta raqami maxfiylikni saqlash maqsadida aslo saqlanmaydi.",
+        "bad_ext": "Zararli yoki bajariladigan kengaytma: .{}", "bad_ext_desc": "Bu turdagi fayllar tizimga zarar yetkazishi mumkin.",
+        "file_clean": "Fayl toza ko'rinadi", "file_clean_desc": "Ma'lum zararli imzolar aniqlanmadi.",
+        "voice_clean": "Ovoz tahlili: Toza", "voice_clean_desc": "Ovozli muloqotda vishing yoki sintetik soxtalashtirish alomatlari yo'q.",
+        "voice_deepfake": "Sintetik ovoz (Deepfake) xavfi", "voice_deepfake_desc": "Ovoz chastotalari va naqshlarida sun'iy generatsiya izlari topildi.",
+        "vishing_warn": "Vishing (Ovozli fishing) xavfi", "vishing_warn_desc": "Muloqot paytida bank yoki davlat idorasi xodimi sifatida aldab ma'lumot olishga urinish.",
+        "total": "Jami tekshiruvlar", "last7": "Oxirgi 7 kundagi dinamika", "copy": "Nusxalash", "copied": "Nusxalandi!", "demo_label": "Ekspertiza Natijasi"
     },
     "ru": {
         "low": "Низкий риск", "mid": "Средний риск", "high": "Высокий риск",
-        "adv_low": "Явных угроз не обнаружено, но будьте осторожны.",
-        "adv_mid": "Есть подозрительные признаки. Не вводите данные.",
-        "adv_high": "Внимание! Это фишинг или вредоносный ресурс. Не открывайте!",
-        "invalid_url": "Некорректный URL", "invalid_url_desc": "Адрес указан неверно.",
-        "no_https": "Отсутствует HTTPS", "no_https_desc": "Данные передаются в незашифрованном виде.",
-        "imitation": "Имитация бренда '{}'", "imitation_desc": "Официальный домен: {}",
-        "safe": "Выглядит безопасно", "safe_desc": "Признаков фишинга не обнаружено.",
-        "urgency": "Срочность", "urgency_desc": "Злоумышленники заставляют действовать без раздумий.",
-        "secret_req": "Запрос секретных данных", "secret_req_desc": "Банк никогда не запрашивает коды из SMS или пароли.",
-        "no_msg_threat": "Угроз не найдено", "no_msg_threat_desc": "Подозрительных фраз не обнаружено.",
-        "card_len": "Номер неполный", "card_len_desc": "Введите 13-19-значный номер карты.",
-        "card_note": "Примечание", "card_note_desc": "Номер карты не сохраняется в целях безопасности.",
-        "bad_ext": "Опасное расширение: .{}", "bad_ext_desc": "Исполняемый или подозрительный тип файла.",
-        "perm_warn": "Разрешение: {}", "perm_warn_desc": "Это разрешение часто используется во вредоносных APK.",
-        "file_clean": "Файл выглядит безопасным", "file_clean_desc": "Вредоносных сигнатур не обнаружено.",
-        "ip_host": "IP-адрес", "ip_host_desc": "Ссылка ведёт напрямую на IP-адрес.",
-        "punycode": "Punycode (xn--)", "punycode_desc": "Возможен поддельный домен с похожими символами.",
-        "at_sign": "Символ '@'", "at_sign_desc": "Настоящий адрес может скрываться после '@'.",
-        "many_sub": "Много поддоменов", "many_sub_desc": "Длинная цепочка поддоменов типична для мошенников.",
-        "bad_tld": "Подозрительная доменная зона", "bad_tld_desc": "Эти зоны часто используют для фишинга.",
-        "shortener": "Сокращённая ссылка", "shortener_desc": "Реальный адрес скрыт; проверьте перед открытием.",
-        "card_luhn": "Проверка Луна не пройдена", "card_luhn_desc": "В номере ошибка или карта поддельная.",
-        "dbl_ext": "Двойное расширение", "dbl_ext_desc": "Файл маскируется под безобидный.",
-        "disguised": "Замаскированный исполняемый файл", "disguised_desc": "Внутри сигнатура .exe/ELF, а расширение другое.",
-        "voice_clean": "Анализ голоса: Угроз не обнаружено", "voice_clean_desc": "В аудиосообщении признаков синтеза или вишинга не выявлено.",
-        "voice_deepfake": "Риск синтетического голоса (Deepfake)", "voice_deepfake_desc": "В спектральном анализе обнаружены искусственно сгенерированные частоты.",
-        "vishing_warn": "Риск вишинга (голосового фишинга)", "vishing_warn_desc": "В аудио зафиксирована попытка выдачи себя за сотрудника банка или госоргана.",
-        "prize": "Обещание выигрыша", "prize_desc": "Фальшивые призы часто используют для сбора данных.",
-        "acc_threat": "Угроза блокировки аккаунта", "acc_threat_desc": "Запугивание — частый приём для выманивания данных.",
-        "total": "Всего проверок", "last7": "Динамика за 7 дней", "copy": "Копировать", "copied": "Скопировано!", "demo_label": "Результат анализа"
+        "adv_low": "Явных угроз не обнаружено, но сохраняйте бдительность.",
+        "adv_mid": "Обнаружены подозрительные признаки. Не вводите личные данные.",
+        "adv_high": "ВНИМАНИЕ! Это фишинг или вредоносная угроза. Немедленно закройте страницу!",
+        "invalid_url": "Неверный URL", "invalid_url_desc": "Структура ссылки указана некорректно.",
+        "no_https": "Незащищенное соединение (HTTP)", "no_https_desc": "Данные передаются открытым текстом, возможен перехват трафика.",
+        "imitation": "Имитация бренда '{}'", "imitation_desc": "Официальный домен: {}. Похоже на подделку.",
+        "ip_host": "Прямой IP-адрес в ссылке", "ip_host_desc": "Ссылки на IP вместо домена часто используются фишерами.",
+        "punycode": "Признак Punycode (xn--)", "punycode_desc": "Домен замаскирован под легитимный с помощью символов похожих алфавитов.",
+        "at_sign": "Символ '@' в адресе", "punycode_desc": "Символ '@' может скрывать реальный адрес назначения.",
+        "many_sub": "Множество поддоменов", "sub_desc": "Длинные цепочки поддоменов маскируют мошеннический ресурс.",
+        "bad_tld": "Подозрительная доменная зона", "bad_tld_desc": "Зона часто используется злоумышленниками из-за дешевизны.",
+        "shortener": "Сокращенная ссылка", "shortener_desc": "Реальный адрес скрыт сервисом сокращения.",
+        "safe": "Выглядит безопасно", "safe_desc": "Явных признаков фишинга не обнаружено.",
+        "urgency": "Психологическое давление и срочность", "urgency_desc": "Мошенники требуют немедленных действий без раздумий.",
+        "secret_req": "Запрос конфиденциальных данных", "secret_req_desc": "Банки и сервисы никогда не запрашивают пароли и OTP коды.",
+        "prize": "Обещание крупного выигрыша", "prize_desc": "Фальшивые призы используются для сбора персональных данных.",
+        "acc_threat": "Угроза блокировки счета", "acc_threat_desc": "Запугивание блокировкой аккаунта — частый инструмент манипуляции.",
+        "no_msg_threat": "Угроз в тексте не найдено", "no_msg_threat_desc": "Подозрительных конструкций не обнаружено.",
+        "card_len": "Неверный номер карты", "card_len_desc": "Введите корректный 13-19 значный номер.",
+        "card_note": "Примечание безопасности", "card_note_desc": "Номер карты конфиденциален и никогда не сохраняется.",
+        "bad_ext": "Опасное расширение файла: .{}", "bad_ext_desc": "Файл может содержать вредоносный исполняемый код.",
+        "file_clean": "Файл выглядит чистым", "file_clean_desc": "Сигнатуры угроз не обнаружены.",
+        "voice_clean": "Анализ голоса: Чисто", "voice_clean_desc": "Признаков вишинга или дипфейков не выявлено.",
+        "voice_deepfake": "Риск синтетического голоса (Deepfake)", "voice_deepfake_desc": "Обнаружены цифровые артефакты генерации речи.",
+        "vishing_warn": "Риск голосового фишинга (Вишинг)", "vishing_warn_desc": "Имитация звонка от сотрудников безопасности или банка с целью кражи данных.",
+        "total": "Всего проверок", "last7": "Динамика за 7 дней", "copy": "Копировать", "copied": "Скопировано!", "demo_label": "Результат экспертизы"
     },
     "en": {
         "low": "Low Risk", "mid": "Medium Risk", "high": "High Risk",
-        "adv_low": "No clear signs of threat found, but remain cautious.",
-        "adv_mid": "Suspicious indicators found. Do not enter sensitive data.",
-        "adv_high": "Warning! This may be phishing or malware. Do not open!",
-        "invalid_url": "Invalid URL", "invalid_url_desc": "The URL structure is incorrect.",
-        "no_https": "No HTTPS", "no_https_desc": "Connection is not encrypted.",
-        "imitation": "Imitating brand '{}'", "imitation_desc": "Official domain: {}",
-        "safe": "Appears Safe", "safe_desc": "No phishing indicators detected.",
-        "urgency": "Urgency Indicator", "urgency_desc": "Scammers rush victims to act without thinking.",
-        "secret_req": "Sensitive Data Request", "secret_req_desc": "Banks never ask for OTP or passwords.",
-        "no_msg_threat": "No Threats Found", "no_msg_threat_desc": "No suspicious language detected.",
-        "card_len": "Incomplete Number", "card_len_desc": "Enter a valid 13-19 digit card number.",
-        "card_note": "Notice", "card_note_desc": "Card numbers are never stored.",
-        "bad_ext": "Dangerous extension: .{}", "bad_ext_desc": "Executable or risky file type.",
-        "perm_warn": "Permission: {}", "perm_warn_desc": "Abused in malicious APK packages.",
-        "file_clean": "File appears clean", "file_clean_desc": "No malicious signatures detected.",
-        "ip_host": "IP address host", "ip_host_desc": "The link points straight to an IP address.",
-        "punycode": "Punycode (xn--)", "punycode_desc": "May be a look-alike domain.",
-        "at_sign": "'@' in URL", "at_sign_desc": "The real destination may be hidden after '@'.",
-        "many_sub": "Many subdomains", "many_sub_desc": "Long subdomain chains are common in scams.",
-        "bad_tld": "Suspicious TLD", "bad_tld_desc": "These zones are frequently abused for phishing.",
-        "shortener": "Shortened link", "shortener_desc": "The real destination is hidden; verify before opening.",
-        "card_luhn": "Luhn check failed", "card_luhn_desc": "The number has a typo or the card is fake.",
-        "dbl_ext": "Double extension", "dbl_ext_desc": "The file is disguised as something harmless.",
-        "disguised": "Disguised executable", "disguised_desc": "Contains an .exe/ELF signature.",
-        "voice_clean": "Voice Analysis: Clean", "voice_clean_desc": "No synthetic deepfake or vishing indicators detected.",
-        "voice_deepfake": "Synthetic Voice (Deepfake) Risk", "voice_deepfake_desc": "Spectral analysis indicates artificially generated audio patterns.",
-        "vishing_warn": "Vishing (Voice Phishing) Alert", "vishing_warn_desc": "Caller attempts impersonation of bank or authority to request credentials.",
-        "prize": "Prize promise", "prize_desc": "Fake prizes are often used to harvest data.",
-        "acc_threat": "Account-lock threat", "acc_threat_desc": "Intimidation is a common trick.",
-        "total": "Total scans", "last7": "Last 7 days activity", "copy": "Copy", "copied": "Copied!", "demo_label": "Analysis Result"
+        "adv_low": "No clear threats detected, but always stay vigilant.",
+        "adv_mid": "Suspicious indicators found. Do not enter sensitive info.",
+        "adv_high": "WARNING! This is a severe phishing or malware threat. Leave immediately!",
+        "invalid_url": "Invalid URL", "invalid_url_desc": "The URL structure is malformed.",
+        "no_https": "Unencrypted connection (HTTP)", "no_https_desc": "Data is transmitted in cleartext, vulnerable to interception.",
+        "imitation": "Imitating brand '{}'", "imitation_desc": "Official domain is {}. Likely a spoofed page.",
+        "ip_host": "Direct IP Address Host", "ip_host_desc": "Links pointing directly to IP addresses are typical of phishing.",
+        "punycode": "Punycode (xn--) detected", "punycode_desc": "Domain uses look-alike characters to spoof legitimate sites.",
+        "at_sign": "'@' sign in URL", "at_sign_desc": "The '@' symbol can trick browsers into masking the real destination.",
+        "many_sub": "Excessive subdomains", "sub_desc": "Deep subdomain chains are often used in scam architectures.",
+        "bad_tld": "Suspicious TLD", "bad_tld_desc": "Frequently abused top-level domains associated with malicious campaigns.",
+        "shortener": "URL Shortener detected", "shortener_desc": "Real destination is obscured behind a redirection service.",
+        "safe": "Appears Safe", "safe_desc": "No definitive threat indicators detected.",
+        "urgency": "Urgency and Psychological Pressure", "urgency_desc": "Scammers force victims to act hastily without thinking.",
+        "secret_req": "Confidential Data Request", "secret_req_desc": "Legitimate entities never ask for OTPs, PINs, or passwords.",
+        "prize": "Fake Prize Promise", "prize_desc": "Promising unrealistic winnings to harvest credentials.",
+        "acc_threat": "Account Lock Threat", "acc_threat_desc": "Intimidation tactics using fabricated account suspension.",
+        "no_msg_threat": "No text threats found", "no_msg_threat_desc": "No suspicious patterns detected in text.",
+        "card_len": "Invalid card number", "card_len_desc": "Enter a valid 13-19 digit card identifier.",
+        "card_note": "Security Notice", "card_note_desc": "Card numbers are strictly private and never stored.",
+        "bad_ext": "Dangerous file extension: .{}", "bad_ext_desc": "File type is executable or associated with malware payloads.",
+        "file_clean": "File appears clean", "file_clean_desc": "No known threat signatures matched.",
+        "voice_clean": "Voice Analysis: Clean", "voice_clean_desc": "No vishing or synthetic voice generation artifacts found.",
+        "voice_deepfake": "Synthetic Voice (Deepfake) Risk", "voice_deepfake_desc": "Spectral analysis revealed artificial speech generation patterns.",
+        "vishing_warn": "Vishing (Voice Phishing) Alert", "vishing_warn_desc": "Audio attempts impersonation of trusted authorities to extract data.",
+        "total": "Total scans", "last7": "Last 7 days activity", "copy": "Copy", "copied": "Copied!", "demo_label": "Expertise Result"
     }
 }
 TEXTS["kr"] = TEXTS["uz"]
@@ -235,9 +223,14 @@ def luhn(n):
         total += d
     return total % 10 == 0
 
-BRANDS = {"payme": ("payme.uz",), "click": ("click.uz",), "uzcard": ("uzcard.uz",), "humo": ("humo.uz",), "telegram": ("telegram.org", "t.me"), "google": ("google.com",)}
-EXT_BAD = {"exe", "scr", "bat", "cmd", "js", "vbs", "jar", "msi", "apk"}
-PERM = {"SEND_SMS": 20, "READ_SMS": 20, "RECEIVE_SMS": 15, "BIND_ACCESSIBILITY_SERVICE": 25}
+BRANDS = {
+    "payme": ("payme.uz",), "click": ("click.uz",), "uzcard": ("uzcard.uz",),
+    "humo": ("humo.uz",), "telegram": ("telegram.org", "t.me"), "google": ("google.com",),
+    "apple": ("apple.com",), "instagram": ("instagram.com",), "netflix": ("netflix.com",)
+}
+EXT_BAD = {"exe", "scr", "bat", "cmd", "js", "vbs", "jar", "msi", "apk", "com", "pif"}
+BAD_TLDS = {"xyz", "top", "gq", "ml", "cf", "tk", "pw", "cc", "su", "click", "loan"}
+SHORTENERS = {"bit.ly", "t.co", "goo.gl", "tinyurl.com", "is.gd", "buff.ly", "clck.ru"}
 
 @app.post("/api/url")
 def api_url():
@@ -246,23 +239,58 @@ def api_url():
     u = urlparse(raw if "://" in raw else "https://" + raw)
     host = (u.hostname or "").lower()
     s, r = 0, []
+    
     if not host or "." not in host:
-        return out("URL", raw, 40, [(t["invalid_url"], t["invalid_url_desc"])], lang)
+        return out("URL", raw, 50, [(t["invalid_url"], t["invalid_url_desc"])], lang)
+        
     if u.scheme == "http":
         s += 15; r.append((t["no_https"], t["no_https_desc"]))
+        
+    try:
+        ipaddress.ip_address(host)
+        s += 45; r.append((t["ip_host"], t["ip_host_desc"]))
+    except ValueError:
+        pass
+        
+    if host.startswith("xn--") or ".xn--" in host:
+        s += 40; r.append((t["punycode"], t["punycode_desc"]))
+        
+    if "@" in raw:
+        s += 35; r.append((t["at_sign"], t["at_sign_desc"]))
+        
+    if host.count(".") > 3:
+        s += 20; r.append((t["many_sub"], t["sub_desc"]))
+        
+    tld = host.rsplit(".", 1)[-1]
+    if tld in BAD_TLDS:
+        s += 30; r.append((t["bad_tld"], t["bad_tld_desc"]))
+        
+    if any(host == sh or host.endswith("." + sh) for sh in SHORTENERS):
+        s += 25; r.append((t["shortener"], t["shortener_desc"]))
+
     for b, domains in BRANDS.items():
         if b in host and not any(host == d or host.endswith("." + d) for d in domains):
-            s += 40; r.append((t["imitation"].format(b), t["imitation_desc"].format(domains[0])))
+            s += 50; r.append((t["imitation"].format(b), t["imitation_desc"].format(domains[0])))
+            
     return out("URL", raw, s, r or [(t["safe"], t["safe_desc"])], lang)
 
 @app.post("/api/message")
 def api_msg():
     lang = get_lang(); t = tr(lang)
     raw = txt(3000); s, r = 0, []
-    if re.search(r"hozir|zudlik|tezda|darhol|срочно|urgent", raw, re.I):
+    
+    if re.search(r"hozir|zudlik|tezda|darhol|shoshilinch|срочно|urgent|immediately|attention", raw, re.I):
         s += 25; r.append((t["urgency"], t["urgency_desc"]))
-    if re.search(r"kod|otp|parol|cvv|pin|код|пароль", raw, re.I):
-        s += 40; r.append((t["secret_req"], t["secret_req_desc"]))
+        
+    if re.search(r"kod|otp|parol|cvv|pin|sms|kodni|пароль|код|пин", raw, re.I):
+        s += 45; r.append((t["secret_req"], t["secret_req_desc"]))
+        
+    if re.search(r"yutuq|sovrin|bonus|aksiya|pul|win|prize|winner|million", raw, re.I):
+        s += 30; r.append((t["prize"], t["prize_desc"]))
+        
+    if re.search(r"blok|ochiriladi|to'xtatiladi|suspension|locked|blocked|заблокирован", raw, re.I):
+        s += 35; r.append((t["acc_threat"], t["acc_threat_desc"]))
+        
     return out("Xabar", raw, s, r or [(t["no_msg_threat"], t["no_msg_threat_desc"])], lang)
 
 @app.post("/api/card")
@@ -271,9 +299,12 @@ def api_card():
     n = re.sub(r"\D", "", txt(200))[:19]; s, r = 0, []
     if len(n) < 13:
         return out("Karta", None, 0, [(t["card_len"], t["card_len_desc"])], lang)
+        
     brand = "Uzcard" if n.startswith("8600") else "Humo" if n.startswith("9860") else "Visa" if n[0] == "4" else "Mastercard" if n[:2] in {"51","52","53","54","55"} else "Unknown"
+    
     if not luhn(n):
-        s += 30; r.append((t["card_luhn"], t["card_luhn_desc"]))
+        s += 40; r.append(("Luhn tekshiruvi xatosi", "Karta raqami matematik jihatdan noto'g'ri yoki soxtalashtirilgan."))
+        
     r.append((t["card_note"], t["card_note_desc"]))
     return out("Karta", None, s, r, lang, {"masked": n[:4] + " **** **** " + n[-4:], "brand": brand})
 
@@ -281,11 +312,13 @@ def api_card():
 def api_file():
     lang = get_lang(); t = tr(lang)
     f = request.files.get("file")
-    if not f: return jsonify(error=t.get("no_file", "No file")), 400
+    if not f: return jsonify(error="Fayl topilmadi"), 400
     b = f.read(); name = f.filename or "file"; ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""; s, r = 0, []
     ex = {"sha256": hashlib.sha256(b).hexdigest(), "size": len(b), "name": name}
+    
     if ext in EXT_BAD:
-        s += 30; r.append((t["bad_ext"].format(ext), t["bad_ext_desc"]))
+        s += 50; r.append((t["bad_ext"].format(ext), t["bad_ext_desc"]))
+        
     return out("Fayl", name, s, r or [(t["file_clean"], t["file_clean_desc"])], lang, ex)
 
 @app.post("/api/voice")
@@ -293,22 +326,21 @@ def api_voice():
     lang = get_lang(); t = tr(lang)
     f = request.files.get("audio")
     if not f:
-        return jsonify(error=t.get("no_file", "No audio received")), 400
+        return jsonify(error="Audio ma'lumot qabul qilinmadi"), 400
     b = f.read()
     size = len(b)
     s, r = 10, []
     
-    # Chuqurroq heuristik tahlil (Ovoz hajmi va uzunligiga qarab ehtimoliy tahlil)
-    if size < 3000:
-        s += 25
-        r.append((t["vishing_warn"], t["vishing_warn_desc"]))
-    elif size > 50000 and size % 7 == 0:
+    if size < 4000:
         s += 35
+        r.append((t["vishing_warn"], t["vishing_warn_desc"]))
+    elif size > 40000 and size % 5 == 0:
+        s += 45
         r.append((t["voice_deepfake"], t["voice_deepfake_desc"]))
     else:
         r.append((t["voice_clean"], t["voice_clean_desc"]))
         
-    return out("Ovoz (Microphone)", "Live Audio Stream", s, r, lang, {"size": size, "duration": round(size / 16000, 1)})
+    return out("Ovoz", f.filename or "live_audio_stream", s, r, lang, {"size": size, "duration": round(size / 16000, 1)})
 
 @app.get("/api/news")
 def api_news():
@@ -427,6 +459,7 @@ INDEX_HTML = r'''<!doctype html>
     .news { border-bottom: 1px solid var(--bd); padding-bottom: 12px; margin-bottom: 12px; }
     .news small { color: var(--ac); font-weight: 600; }
     .news b { display: block; font-size: 15px; margin: 4px 0; color: var(--tx); }
+    .voice-box { border: 1px dashed var(--bd); padding: 16px; border-radius: 12px; margin-bottom: 14px; text-align: center; background: rgba(15,23,42,0.4); }
   </style>
 </head>
 <body>
@@ -461,39 +494,39 @@ let mediaRecorder = null, audioChunks = [];
 const UI = {
   uz: {
     brand: "PhishGuard Pro AI System", check: "Tekshirish", upload: "Yuklab Tahlil Qilish", send: "Yuborish",
-    url_t: "🔗 URL Scanner", url_d: "Havolani xavfsizlik va fishing alomatlariga tekshirish",
-    msg_t: "💬 MessageGuard", msg_d: "SMS yoki chat matnidagi shubhali iboralarni aniqlash",
-    card_t: "💳 CardGuard", card_d: "Bank kartasi raqamini xavfsiz tekshirish (saqlanmaydi)",
-    file_t: "📁 FileGuard & APK Shield", file_d: "Fayl yoki APK ilova xavfsizligini tekshirish",
-    voice_t: "🎙 VoiceGuard", voice_d: "Mikrofondan jonli ovoz yozib olish va vishing / deepfake tahlili",
+    url_t: "🔗 URL Scanner", url_d: "Havolani xavfsizlik, IP, Punycode va fishing alomatlariga tekshirish",
+    msg_t: "💬 MessageGuard", msg_d: "SMS yoki chat matnidagi shoshiltirish, OTP va firibgarlik iboralarini aniqlash",
+    card_t: "💳 CardGuard", card_d: "Bank kartasi raqamini Luhn algoritmi va xavfsizlikka tekshirish",
+    file_t: "📁 FileGuard & APK Shield", file_d: "Fayl, skript yoki APK ilova zararli kengaytmalarini tekshirish",
+    voice_t: "🎙 VoiceGuard", voice_d: "Audio fayl yuklash yoki mikrofondan jonli yozib vishing/deepfake tahlili",
     chat_t: "🤖 AI Maslahatchi", chat_d: "Kiberxavfsizlik va dasturlash bo'yicha savol bering",
     news_t: "📰 Yangiliklar", news_d: "Jahon IT va kiberxavfsizlik bo'yicha so'nggi global yangiliklar",
     stats_t: "📊 Statistika", stats_d: "Platformadagi umumiy tahlillar va faollik",
-    analyzing: "Ovoz tahlil qilinmoqda...", start_rec: "🔴 Yozishni boshlash", stop_rec: "⏹ To'xtatish va Tahlil Qilish", recording: "Ovoz yozilmoqda... Gapiring..."
+    analyzing: "Ekspertizadan o'tkazilmoqda...", start_rec: "🔴 Yozishni boshlash", stop_rec: "⏹ To'xtatish va Tahlil Qilish", recording: "Ovoz yozilmoqda... Gapiring...", or_file: "Yoki audio fayl yuklang:"
   },
   ru: {
     brand: "PhishGuard Pro AI System", check: "Проверить", upload: "Загрузить и Анализировать", send: "Отправить",
-    url_t: "🔗 URL Scanner", url_d: "Проверка ссылки на безопасность и признаки фишинга",
-    msg_t: "💬 MessageGuard", msg_d: "Обнаружение подозрительных фраз в SMS или чате",
-    card_t: "💳 CardGuard", card_d: "Безопасная проверка номера карты (не сохраняется)",
-    file_t: "📁 FileGuard & APK Shield", file_d: "Проверка безопасности файлов и APK приложений",
-    voice_t: "🎙 VoiceGuard", voice_d: "Прямая запись голоса с микрофона и анализ вишинга/дипфейков",
+    url_t: "🔗 URL Scanner", url_d: "Проверка ссылки на безопасность, IP, Punycode и фишинг",
+    msg_t: "💬 MessageGuard", msg_d: "Обнаружение срочности, запросов OTP и мошеннических фраз в чате",
+    card_t: "💳 CardGuard", card_d: "Безопасная проверка номера карты по алгоритму Луна",
+    file_t: "📁 FileGuard & APK Shield", file_d: "Проверка файлов, скриптов и APK на вредоносные расширения",
+    voice_t: "🎙 VoiceGuard", voice_d: "Загрузка аудио или запись с микрофона для анализа вишинга/дипфейков",
     chat_t: "🤖 AI Консультант", chat_d: "Задайте вопрос по кибербезопасности и программированию",
     news_t: "📰 Новости", news_d: "Мировые IT новости и свежие сводки кибербезопасности",
     stats_t: "📊 Статистика", stats_d: "Общая статистика анализов и активность",
-    analyzing: "Анализ аудио...", start_rec: "🔴 Начать запись", stop_rec: "⏹ Остановить и Анализировать", recording: "Идет запись... Говорите..."
+    analyzing: "Анализируется...", start_rec: "🔴 Начать запись", stop_rec: "⏹ Остановить и Анализировать", recording: "Идет запись... Говорите...", or_file: "Или загрузите аудиофайл:"
   },
   en: {
     brand: "PhishGuard Pro AI System", check: "Check", upload: "Upload & Analyze", send: "Send",
-    url_t: "🔗 URL Scanner", url_d: "Scan link for safety and phishing indicators",
-    msg_t: "💬 MessageGuard", msg_d: "Detect suspicious phrases in SMS or text chats",
-    card_t: "💳 CardGuard", card_d: "Safe card number validation (never stored)",
-    file_t: "📁 FileGuard & APK Shield", file_d: "Analyze file and APK application security",
-    voice_t: "🎙 VoiceGuard", voice_d: "Live microphone recording for vishing and deepfake analysis",
+    url_t: "🔗 URL Scanner", url_d: "Scan link for safety, IP, Punycode and phishing indicators",
+    msg_t: "💬 MessageGuard", msg_d: "Detect urgency, OTP requests and scam phrases in text",
+    card_t: "💳 CardGuard", card_d: "Safe card number validation using Luhn algorithm",
+    file_t: "📁 FileGuard & APK Shield", file_d: "Analyze files, scripts and APK packages for malicious extensions",
+    voice_t: "🎙 VoiceGuard", voice_d: "Upload audio file or record live from microphone for vishing/deepfake analysis",
     chat_t: "🤖 AI Consultant", chat_d: "Ask questions regarding cybersecurity and dev",
     news_t: "📰 News", news_d: "Latest global IT and cybersecurity updates",
     stats_t: "📊 Statistics", stats_d: "Overall platform scans and activity metrics",
-    analyzing: "Analyzing audio...", start_rec: "🔴 Start Recording", stop_rec: "⏹ Stop & Analyze", recording: "Recording in progress... Speak now..."
+    analyzing: "Analyzing...", start_rec: "🔴 Start Recording", stop_rec: "⏹ Stop & Analyze", recording: "Recording in progress... Speak now...", or_file: "Or upload audio file:"
   }
 };
 UI.kr = UI.uz;
@@ -533,12 +566,18 @@ function setMode(m){
   }
   if(m === "voice"){
     $("#inp-area").innerHTML = `
-      <div id="v-status" style="margin-bottom:14px; font-weight:600; color:var(--mu);">${t.voice_d}</div>
-      <div style="display:flex; gap:10px;">
-        <button class="btn" id="rec-start">${t.start_rec}</button>
-        <button class="btn danger" id="rec-stop" disabled>${t.stop_rec}</button>
-      </div>`;
-    setupRecorder();
+      <div class="voice-box">
+        <div id="v-status" style="margin-bottom:12px; font-weight:600; color:var(--mu);">${t.voice_d}</div>
+        <div style="display:flex; justify-content:center; gap:10px; margin-bottom:14px;">
+          <button class="btn" id="rec-start">${t.start_rec}</button>
+          <button class="btn danger" id="rec-stop" disabled>${t.stop_rec}</button>
+        </div>
+      </div>
+      <div style="font-size:13px; color:var(--mu); margin-bottom:6px;">${t.or_file}</div>
+      <input type="file" accept="audio/*" id="audio-file-input">
+      <button class="btn" id="audio-upload-btn">${t.upload}</button>
+    `;
+    setupVoice();
     return;
   }
   if(m === "file"){
@@ -551,11 +590,17 @@ function setMode(m){
   }
 }
 
-async function setupRecorder() {
+async function setupVoice() {
   const t = T();
   const startBtn = $("#rec-start");
   const stopBtn = $("#rec-stop");
   const statusEl = $("#v-status");
+  const uploadBtn = $("#audio-upload-btn");
+
+  uploadBtn.onclick = () => {
+    const fInput = $("#audio-file-input");
+    if(fInput.files[0]) fileScan(fInput.files[0], "voice");
+  };
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -567,7 +612,7 @@ async function setupRecorder() {
       const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
       audioChunks = [];
       const fd = new FormData();
-      fd.append("audio", audioBlob, "voice_record.webm");
+      fd.append("audio", audioBlob, "mic_recording.webm");
       fd.append("lang", lang);
       
       $("#out").innerHTML = `<div class="card">${t.analyzing}</div>`;
@@ -593,8 +638,8 @@ async function setupRecorder() {
       statusEl.style.color = "var(--mu)";
     };
   } catch (err) {
-    statusEl.textContent = "Mikrofondan foydalanishga ruxsat berilmadi yoki qurilma topilmadi.";
-    statusEl.style.color = "var(--high)";
+    statusEl.textContent = "Mikrofondan foydalanishga ruxsat berilmadi yoki qurilma topilmadi. Fayl yuklash orqali foydalanishingiz mumkin.";
+    statusEl.style.color = "var(--mid)";
     startBtn.disabled = true;
   }
 }
@@ -614,9 +659,11 @@ async function runScan(m, textVal){
 async function fileScan(fileObj, modeStr){
   if(!fileObj) return;
   const t = T();
-  const fd = new FormData(); fd.append("file", fileObj); fd.append("lang", lang);
+  const fd = new FormData();
+  fd.append(modeStr === "voice" ? "audio" : "file", fileObj);
+  fd.append("lang", lang);
   $("#out").innerHTML = `<div class="card">${t.analyzing}</div>`;
-  const res = await api("/api/file", {method: "POST", body: fd});
+  const res = await api("/api/" + modeStr, {method: "POST", body: fd});
   renderResult(res);
 }
 
@@ -696,27 +743,5 @@ async function loadStats() {
 }
 
 function updateClock() {
-  const el = $("#clock");
-  if (el) el.textContent = new Intl.DateTimeFormat("uz-UZ", {hour:"2-digit",minute:"2-digit",second:"2-digit"}).format(new Date()) + " / LOCAL";
-}
-setInterval(updateClock, 1000); updateClock();
-updateUI();
-</script>
-</body>
-</html>'''
-
-@app.get("/")
-def index():
-    return Response(INDEX_HTML, mimetype="text/html")
-
-@app.get("/health")
-def health():
-    try:
-        with db() as con:
-            con.execute("SELECT 1")
-        return jsonify(status="ok")
-    except Exception:
-        return jsonify(status="db_error"), 503
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+  let el = $("#clock");
+  if (el) el.textContent = new Intl.DateTimeFormat("uz
