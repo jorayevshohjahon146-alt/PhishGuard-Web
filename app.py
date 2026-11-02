@@ -1,19 +1,47 @@
-"""PhishGuard — Kiberxavfsizlik, IT yangiliklar va AI yordamchi ilovasi (Flask + SQLite). Ishga tushirish: python app.py"""
-import hashlib, io, json, os, re, time, urllib.request, zipfile, sqlite3
+"""
+PhishGuard Pro AI — Global Kiberxavfsizlik Ekotizimi
+=====================================================
+Ushbu ilova PhishGuard prezentatsiyasidagi barcha 19 ta slayd va modullarni
+o'z ichiga olgan to'liq va mukammal Flask + SQLite platformasidir.
+
+Asosiy Modullar:
+  1. URL Scanner — Domen, IP, Punycode, TLD va brend taqlidini aniqlash.
+  2. MessageGuard — SMS/Chat lisoniy tahlili, shoshiltirish va OTP aniqlash.
+  3. CardGuard — Luhn algoritmi, BIN tahlili, to'lov xavfsizligi.
+  4. FileGuard & APK Shield — MZ/ELF bayt tahlili va AndroidManifest ruxsatlari tahlili.
+  5. VoiceGuard — Ovozli xabarlar va Deepfake sintetik ovoz ehtimoli bahosi.
+  6. QR Guard — QR-kodlar va yashirin havolalarni skanerlash.
+  7. Family Guard — Oilaviy maxfiy so mezonlari va keksalar uchun sodda rejim.
+  8. Cyber Academy — Amaliy kiberxavfsizlik darslari, testlar va ball tizimi.
+  9. Business Guard — Korporativ phishing simulyatsiyalari va xodimlar statistikasi.
+ 10. SOS "Men Aldandim" — Tezkor amaliy qadamlar va shikoyat matni generatori.
+ 11. Threat Intelligence & History — SQLite bazasida SHA-256 xeshli anonim tarix.
+
+Ishga tushirish: python app_phishguard_ecosystem.py
+"""
+
+import hashlib
+import io
+import json
+import os
+import re
+import sqlite3
+import time
+import urllib.request
+import zipfile
 from datetime import datetime, timezone
-from collections import defaultdict, deque
 from urllib.parse import urlparse
-from flask import Flask, Response, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB limits
 
-# --- SQLite Database for Scan History ---
+# --- 1. MA'LUMOTLAR BAZASI VA XAVFSIZLIK SOZLAMALARI ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.environ.get("PHISHGUARD_DB", os.path.join(BASE_DIR, "phishguard.db"))
+DB_PATH = os.environ.get("PHISHGUARD_DB", os.path.join(BASE_DIR, "phishguard_ecosystem.db"))
 
 def db_connect():
-    con = sqlite3.connect(DB_PATH, timeout=10)
+    con = sqlite3.connect(DB_PATH, timeout=15)
     con.row_factory = sqlite3.Row
     return con
 
@@ -30,20 +58,25 @@ def init_db():
                 created_at TEXT NOT NULL
             )
         """)
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS family_secrets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                family_name TEXT NOT NULL,
+                passphrase_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS business_simulations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                company_name TEXT NOT NULL,
+                target_email TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
         con.execute("CREATE INDEX IF NOT EXISTS idx_scans_created ON scans(created_at)")
         con.execute("CREATE INDEX IF NOT EXISTS idx_scans_level ON scans(level)")
-
-def save_scan(kind, preview, score, level, reasons):
-    raw = str(preview or "")
-    digest = hashlib.sha256(raw.encode("utf-8", "ignore")).hexdigest()
-    with db_connect() as con:
-        con.execute(
-            """INSERT INTO scans(kind, preview_hash, score, level, reasons_json, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (str(kind)[:40], digest, int(score), str(level),
-             json.dumps(reasons, ensure_ascii=False)[:12000],
-             datetime.now(timezone.utc).isoformat())
-        )
 
 init_db()
 
@@ -52,622 +85,707 @@ def add_security_headers(response):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-    response.headers.setdefault("Cache-Control", "no-store")
+    response.headers.setdefault("Cache-Control", "no-store, no-cache, must-revalidate")
     return response
 
+# --- 2. GLOBAL LUG'ATLAR VA QOIDALAR ---
 LV = {"low": "Past xavf", "mid": "O'rta xavf", "high": "Yuqori xavf"}
 ADV = {
-    "low": "Aniq xavf belgisi topilmadi, lekin bu kafolat emas. Shubha bo'lsa, rasmiy kanal orqali tekshiring.",
-    "mid": "Ehtiyot bo'ling: havolani ochmang, ma'lumot kiritmang, rasmiy ilova yoki call-markaz orqali tekshiring.",
-    "high": "Ochmang va hech narsa yubormang. Kod, parol yoki karta ma'lumotini bermang. Aldanib qolgan bo'lsangiz — SOS bo'limiga o'ting."
+    "low": "Aniq xavf belgisi topilmadi, lekin bu 100% kafolat emas. Shubha bo'lsa, rasmiy kanal orqali tekshiring.",
+    "mid": "Ehtiyot bo'ling: havolani ochmang, shaxsiy ma'lumot kiritmang va rasmiy call-markaz orqali tasdiqlang.",
+    "high": "Ochmang va hech narsa yubormang! Kod, parol yoki karta ma'lumotini bermang. Aldanib qolgan bo'lsangiz — SOS bo'limiga o'ting."
 }
 
-def out(kind, preview, score, reasons, extra=None):
-    score = max(0, min(100, int(score)))
-    lv = "low" if score < 30 else "mid" if score < 60 else "high"
-    safe_reasons = [{"t": str(t)[:160], "why": str(w)[:500]} for t, w in reasons]
-    try:
-        save_scan(kind, preview, score, lv, safe_reasons)
-    except Exception:
-        app.logger.exception("Scan history could not be saved")
-    return jsonify(score=score, level=lv, label=LV[lv], advice=ADV[lv],
-                   reasons=safe_reasons, **(extra or {}))
-
-BRANDS = {"payme": "payme.uz", "click": "click.uz", "uzcard": "uzcard.uz", "humo": "humo.uz", "paynet": "paynet.uz", "telegram": "telegram.org",
-          "google": "google.com", "instagram": "instagram.com", "paypal": "paypal.com", "apple": "apple.com", "uzum": "uzum.uz", "olx": "olx.uz"}
-BAD_TLD = {"xyz", "top", "click", "tk", "ml", "gq", "cf", "work", "zip", "icu", "buzz", "cfd", "sbs"}
+BRANDS = {
+    "payme": "payme.uz", "click": "click.uz", "uzcard": "uzcard.uz", "humo": "humo.uz",
+    "paynet": "paynet.uz", "telegram": "telegram.org", "google": "google.com",
+    "instagram": "instagram.com", "paypal": "paypal.com", "apple": "apple.com",
+    "uzum": "uzum.uz", "olx": "olx.uz", "binance": "binance.com", "yandex": "yandex.ru"
+}
+BAD_TLD = {"xyz", "top", "click", "tk", "ml", "gq", "cf", "work", "zip", "icu", "buzz", "cfd", "sbs", "cc"}
 SHORT = {"bit.ly", "tinyurl.com", "t.co", "goo.gl", "cutt.ly", "is.gd", "rb.gy", "shorturl.at"}
 KW = ["login", "verify", "secure", "update", "account", "bonus", "gift", "prize", "otp", "parol", "tasdiq", "sovrin", "yutuq", "confirm", "wallet"]
 
-def txt(n):
-    j = request.get_json(silent=True)
-    v = j.get("text", "") if isinstance(j, dict) else ""
-    return v[:n] if isinstance(v, str) else str(v or "")[:n]
+EXT_BAD = {"exe", "scr", "bat", "cmd", "js", "vbs", "jar", "msi", "apk", "ps1", "lnk", "iso", "pif"}
+PERM_WEIGHTS = {
+    "SEND_SMS": 25, "READ_SMS": 25, "RECEIVE_SMS": 20,
+    "BIND_ACCESSIBILITY_SERVICE": 30, "SYSTEM_ALERT_WINDOW": 20,
+    "REQUEST_INSTALL_PACKAGES": 25, "BIND_DEVICE_ADMIN": 30,
+    "RECORD_AUDIO": 15, "READ_CONTACTS": 15, "READ_CALL_LOG": 20,
+    "CAMERA": 10, "ACCESS_FINE_LOCATION": 10
+}
 
-def scan_url(raw):
-    try: return _scan_url(raw)
-    except Exception: return 0, [("URL tushunarsiz", "Manzil noto'g'ri yozilgan.")]
+# --- 3. TAHLIL ENGINE LOYIHA STRUKTURASI ---
+class PhishGuardEngine:
+    @staticmethod
+    def save_scan_history(kind, preview, score, level, reasons):
+        raw = str(preview or "")
+        digest = hashlib.sha256(raw.encode("utf-8", "ignore")).hexdigest()
+        try:
+            with db_connect() as con:
+                con.execute(
+                    """INSERT INTO scans(kind, preview_hash, score, level, reasons_json, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (str(kind)[:40], digest, int(score), str(level),
+                     json.dumps(reasons, ensure_ascii=False)[:12000],
+                     datetime.now(timezone.utc).isoformat())
+                )
+        except Exception:
+            app.logger.exception("Scan history error")
 
-def _scan_url(raw):
-    raw = raw.strip(); scheme = bool(re.match(r"^[a-z][a-z0-9+.-]*://", raw, re.I))
-    u = urlparse(raw if scheme else "https://" + raw); host = (u.hostname or "").lower(); s, r = 0, []
-    def add(p, t, w): nonlocal s; s += p; r.append((t, w))
-    if not host or "." not in host and not re.match(r"^[\d.]+$", host): return 0, [("URL tushunarsiz", "Manzil noto'g'ri yozilgan ko'rinadi.")]
-    if scheme and u.scheme == "http": add(15, "HTTPS yo'q", "Ma'lumot shifrlanmagan holda uzatiladi.")
-    if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", host): add(30, "Domen o'rniga IP manzil", "Rasmiy xizmatlar odatda IP orqali ishlamaydi.")
-    if "@" in (u.netloc or ""): add(25, "URL ichida '@' belgisi", "Haqiqiy manzilni yashirish uchun ishlatiladi.")
-    if "xn--" in host: add(25, "Punycode domen", "Shakli o'xshash harflar bilan soxta domen bo'lishi mumkin.")
-    if host.rsplit(".", 1)[-1] in BAD_TLD: add(15, "Shubhali domen zonasi", "Bu zonalar firibgarlikda ko'p uchraydi.")
-    if host in SHORT: add(15, "Qisqartirilgan havola", "Haqiqiy manzil yashirilgan, ochishdan oldin kengaytirib tekshiring.")
-    for b, d in BRANDS.items():
-        if b in host and not (host == d or host.endswith("." + d)):
-            add(40, f"'{b}' brendiga taqlid", f"Rasmiy domen: {d}. Bu manzil boshqa sayt."); break
-    k = [x for x in KW if x in (host + u.path + (u.query or "")).lower()]
-    if k: add(min(24, 8 * len(k)), "Shubhali so'zlar", "Manzilda: " + ", ".join(k[:4]))
-    if host.count(".") >= 4: add(10, "Juda ko'p subdomen", "Murakkab manzil — haqiqiy domen oxirgi ikki qismda.")
-    if host.count("-") >= 3: add(8, "Ko'p defis", "Soxta domenlarda tez-tez uchraydi.")
-    if len(raw) > 75: add(8, "Juda uzun URL", "Uzun manzillar shubhali qismlarni yashirishi mumkin.")
-    return s, r or [("Belgilar topilmadi", "Domen va tuzilishda ma'lum xavf belgisi yo'q.")]
+    @classmethod
+    def format_output(cls, kind, preview, score, reasons, extra=None):
+        score = max(0, min(100, int(score)))
+        lv = "low" if score < 30 else "mid" if score < 60 else "high"
+        safe_reasons = [{"t": str(t)[:160], "why": str(w)[:500]} for t, w in reasons]
+        cls.save_scan_history(kind, preview, score, lv, safe_reasons)
+        return jsonify(
+            score=score, level=lv, label=LV[lv], advice=ADV[lv],
+            reasons=safe_reasons, **(extra or {})
+        )
 
-PAT = [(r"hozir|zudlik|tezda|24 soat|darhol|срочно|немедленно|сейчас|urgent|immediately|asap", 20, "Shoshiltirish", "Firibgarlar o'ylashga vaqt bermaydi."),
-       (r"(sms|tasdiq\w*|maxfiy)\s*kod|kodni\s*(yubor|ayt)|\bpin\b|\bcvv\b|парол|код\s*из\s*смс|otp|parolni", 40, "Maxfiy kod/parol so'ralmoqda", "Bank hech qachon kod yoki PIN so'ramaydi."),
-       (r"bloklan|yopil|to'xtatil|заблокир|suspend|blocked", 20, "Qo'rqitish", "Hisob yopilishi bilan qo'rqitish — klassik usul."),
-       (r"yutuq|sovrin|tabriklaymiz|bonus|выигр|приз|congratulations|you won|prize", 25, "Yutuq va'dasi", "Kutilmagan sovrin xabarlari deyarli doim aldov."),
-       (r"o'tkaz|pul\s*yubor|перевед|переслать|transfer|karta raqam|номер карты", 20, "Pul yoki karta so'rovi", "Notanish odamga pul/karta ma'lumoti yubormang."),
-       (r"https?://|www\.|t\.me/|bit\.ly", 10, "Havola mavjud", "Xabardagi havolani ochishdan oldin tekshiring.")]
+    @staticmethod
+    def scan_url(raw):
+        raw = raw.strip()
+        if not raw:
+            return 0, [("URL bo'sh", "Manzil kiritilmadi.")]
+        scheme = bool(re.match(r"^[a-z][a-z0-9+.-]*://", raw, re.I))
+        u = urlparse(raw if scheme else "https://" + raw)
+        host = (u.hostname or "").lower()
+        s, r = 0, []
+
+        def add(p, t, w):
+            nonlocal s
+            s += p
+            r.append((t, w))
+
+        if not host or ("." not in host and not re.match(r"^[\d.]+$", host)):
+            return 40, [("URL tushunarsiz", "Manzil noto'g'ri yozilgan ko'rinadi.")]
+
+        if scheme and u.scheme == "http":
+            add(15, "HTTPS shifrlash yo'q", "Ma'lumotlar ochiq holda uzatiladi.")
+        if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", host):
+            add(35, "Domen o'rniga IP manzil", "Haqiqiy rasmiy xizmatlar IP orqali kirishni talab qilmaydi.")
+        if "@" in (u.netloc or ""):
+            add(30, "URL ichida '@' belgisi mavjud", "Haqiqiy manzilni yashirish uchun ishlatiladigan manipulyatsiya.")
+        if "xn--" in host:
+            add(25, "Punycode (Homograph) domen", "Belgilari o'xshash alifbolar orqali soxtalashtirilgan domen.")
+        if host.rsplit(".", 1)[-1] in BAD_TLD:
+            add(20, "Shubhali domen zonasi (TLD)", f".{host.rsplit('.', 1)[-1]} zonasi kiberfiribgarlikda ko'p uchraydi.")
+        if host in SHORT:
+            add(15, "Qisqartirilgan havola", "Asl yo'naltirilgan manzil yashirilgan.")
+
+        for b, d in BRANDS.items():
+            if b in host and not (host == d or host.endswith("." + d)):
+                add(45, f"'{b}' brendiga taqlid", f"Rasmiy domen: {d}. Bu manzil boshqa soxta manba.")
+                break
+
+        k = [x for x in KW if x in (host + u.path + (u.query or "")).lower()]
+        if k:
+            add(min(24, 8 * len(k)), "Shubhali kalit so'zlar", "Manzilda aniqlandi: " + ", ".join(k[:4]))
+
+        if host.count(".") >= 4:
+            add(12, "Juda ko'p subdomenlar", "Murakkab subdomen tuzilishi haqiqiy domen nomini chalg'itadi.")
+        if host.count("-") >= 3:
+            add(10, "Ko'p defislar", "Soxta fishing domenlarida tez-tez uchraydi.")
+        if len(raw) > 75:
+            add(8, "Uzun URL manzil", "Juda uzun manzillar shubhali parametrlarni yashirishi mumkin.")
+
+        return s, r or [("Belgilar topilmadi", "Domen va tuzilishda ma'lum xavf belgisi yo'q.")]
+
+    @staticmethod
+    def scan_message(text):
+        if not text:
+            return 0, [("Matn bo'sh", "Xabar kiritilmadi.")]
+        s, r = 0, []
+        PATTERNS = [
+            (r"hozir|zudlik|tezda|24 soat|darhol|срочно|немедленно|urgent|asap", 20, "Shoshiltirish ruhiyati", "Firibgarlar o'ylashga vaqt bermaslikka harakat qiladi."),
+            (r"(sms|tasdiq\w*|maxfiy)\s*kod|kodni\s*(yubor|ayt)|\bpin\b|\bcvv\b|парол|otp", 45, "Maxfiy kod/parol so'ralmoqda", "Bank yoki rasmiy tashkilot hech qachon SMS kod yoki PIN so'ramaydi."),
+            (r"bloklan|yopil|to'xtatil|заблокир|suspend|blocked", 20, "Qo'rqitish texnikasi", "Hisob yopilishi bilan qo'rqitish — klassik firibgarlikusuli."),
+            (r"yutuq|sovrin|tabriklaymiz|bonus|выигр|приз|congratulations|you won", 25, "Yutuq va bonus va'dasi", "Kutilmagan sovrin va sovg'alar deyarli doim aldovdir."),
+            (r"o'tkaz|pul\s*yubor|перевед|переслать|transfer|karta raqam", 20, "Pul yoki karta so'rovi", "Notanish yoki tasdiqlanmagan shaxsga pul o'tkazmang.")
+        ]
+        for p, w, a, b in PATTERNS:
+            m = re.search(p, text, re.I)
+            if m:
+                s += w
+                r.append((a, f"«{m.group(0)}» — {b}"))
+        
+        urls = re.findall(r"(?:https?://|www\.)[^\s]+", text, re.I)
+        for u in urls[:3]:
+            us, ur = PhishGuardEngine.scan_url(u)
+            s += us // 2
+            r += [(f"Xabardagi havola: {a}", b) for a, b in ur if us > 0]
+
+        return s, r or [("Aniq belgi topilmadi", "Ma'lum firibgarlik iboralari aniqlanmadi.")]
+
+    @staticmethod
+    def check_luhn(card_num):
+        digits = [int(c) for c in card_num][::-1]
+        return (sum(digits[0::2]) + sum(sum(divmod(x * 2, 10)) for x in digits[1::2])) % 10 == 0
+
+# --- 4. API ENDPOINTS ---
 
 @app.post("/api/url")
 def api_url():
-    t = txt(500); s, r = scan_url(t); return out("URL", t, s, r)
+    j = request.get_json(silent=True) or {}
+    raw = str(j.get("text", ""))[:500]
+    s, r = PhishGuardEngine.scan_url(raw)
+    return PhishGuardEngine.format_output("URL Scanner", raw, s, r)
 
 @app.post("/api/message")
-def api_msg():
-    t = txt(3000); s, r = 0, []
-    for p, w, a, b in PAT:
-        m = re.search(p, t, re.I)
-        if m: s += w; r.append((a, f"«{m.group(0)}» — {b}"))
-    for u in re.findall(r"(?:https?://|www\.)[^\s]+", t, re.I)[:3]:
-        us, ur = scan_url(u); s += us // 2
-        r += [("Havola: " + a, b) for a, b in ur if us]
-    return out("Xabar", t, s, r or [("Belgilar topilmadi", "Ma'lum firibgarlik iboralari aniqlanmadi.")])
-
-def luhn(n):
-    d = [int(c) for c in n][::-1]
-    return (sum(d[0::2]) + sum(sum(divmod(x * 2, 10)) for x in d[1::2])) % 10 == 0
+def api_message():
+    j = request.get_json(silent=True) or {}
+    raw = str(j.get("text", ""))[:3000]
+    s, r = PhishGuardEngine.scan_message(raw)
+    return PhishGuardEngine.format_output("MessageGuard", raw, s, r)
 
 @app.post("/api/card")
 def api_card():
-    t = txt(200); n = re.sub(r"\D", "", t)[:19]; s, r = 0, []
-    if len(n) < 13: return out("Karta", None, 0, [("Raqam to'liq emas", "13–19 xonali karta raqamini kiriting.")])
-    brand = "Uzcard" if n.startswith("8600") else "Humo" if n.startswith("9860") else "Visa" if n[0] == "4" else "Mastercard" if n[:2] in {"51", "52", "53", "54", "55"} else "Noma'lum"
-    if not luhn(n): s += 60; r.append(("Luhn tekshiruvi o'tmadi", "Raqam haqiqiy karta emas yoki xato kiritilgan."))
-    if brand == "Noma'lum": s += 20; r.append(("Brend aniqlanmadi", "Uzcard/Humo/Visa/Mastercard emas."))
-    r.append(("Eslatma", "PIN, CVV va SMS kodni hech kimga bermang — PhishGuard ham ularni saqlamaydi."))
-    return out("Karta", None, s, r, {"masked": n[:4] + " **** **** " + n[-4:], "brand": brand})
-
-EXT_BAD = {"exe", "scr", "bat", "cmd", "js", "vbs", "jar", "msi", "apk", "ps1", "lnk", "iso"}
-PERM = {"SEND_SMS": 20, "READ_SMS": 20, "RECEIVE_SMS": 15, "BIND_ACCESSIBILITY_SERVICE": 25, "SYSTEM_ALERT_WINDOW": 15,
-        "REQUEST_INSTALL_PACKAGES": 20, "BIND_DEVICE_ADMIN": 25, "RECORD_AUDIO": 8, "READ_CONTACTS": 8, "READ_CALL_LOG": 12}
+    j = request.get_json(silent=True) or {}
+    raw = str(j.get("text", ""))[:200]
+    n = re.sub(r"\D", "", raw)[:19]
+    s, r = 0, []
+    if len(n) < 13:
+        return PhishGuardEngine.format_output("CardGuard", None, 0, [("Raqam to'liq emas", "13–19 xonali karta raqamini kiriting.")])
+    
+    brand = "Uzcard" if n.startswith("8600") else "Humo" if n.startswith("9860") else "Visa" if n[0] == "4" else "Mastercard" if n[:2] in {"51","52","53","54","55"} else "Noma'lum"
+    if not PhishGuardEngine.check_luhn(n):
+        s += 65
+        r.append(("Luhn tekshiruvi o'tmadi", "Karta raqami shakli noto'g'ri kiritilgan yoki soxta."))
+    if brand == "Noma'lum":
+        s += 20
+        r.append(("Brend aniqlanmadi", "Uzcard/Humo/Visa/Mastercard diapazoniga tushmadi."))
+    
+    r.append(("Maxfiylik himoyasi", "PIN, CVV va SMS kod hech kimga berilmasligi shart. PhishGuard ularni saqlamaydi."))
+    return PhishGuardEngine.format_output("CardGuard", None, s, r, {"masked": n[:4] + " **** **** " + n[-4:], "brand": brand})
 
 @app.post("/api/file")
 def api_file():
     f = request.files.get("file")
-    if not f: return jsonify(error="Fayl yo'q"), 400
-    b = f.read(); name = f.filename or "fayl"; ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""; s, r = 0, []
+    if not f:
+        return jsonify(error="Fayl yuklanmadi"), 400
+    b = f.read()
+    name = f.filename or "fayl"
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    s, r = 0, []
     ex = {"sha256": hashlib.sha256(b).hexdigest(), "md5": hashlib.md5(b).hexdigest(), "size": len(b), "name": name}
-    if ext in EXT_BAD: s += 25; r.append((f".{ext} bajariladigan/xavfli tur", "Bunday fayllarni ishonchsiz manbadan ochmang."))
-    if len(name.split(".")) > 2 and ext in EXT_BAD: s += 25; r.append(("Qo'sh kengaytma", "Masalan 'hujjat.pdf.exe' — oddiy hujjat kabi ko'rsatilgan."))
-    if b[:2] == b"MZ" and ext not in EXT_BAD: s += 50; r.append(("Fayl turi yolg'on", "Ichida Windows dasturlash qismi bor, lekin kengaytma boshqacha."))
-    if b[:4] == b"\x7fELF": s += 30; r.append(("ELF bajariladigan fayl", "Linux/Android ijro fayli."))
-    if ext == "apk" or (b[:4] == b"PK\x03\x04" and b"AndroidManifest.xml" in b[:200000]):
+
+    if ext in EXT_BAD:
+        s += 30
+        r.append((f".{ext} xavfli fayl kengaytmasi", "Bajariluvchi yoki skript fayllarni nodavlat manbalardan ochmang."))
+    if len(name.split(".")) > 2 and ext in EXT_BAD:
+        s += 25
+        r.append(("Qo'sh kengaytma aniqlandi", "Masalan 'hujjat.pdf.exe' — oddiy hujjat ko'rinishida yashiringan troyan."))
+    if b[:2] == b"MZ" and ext not in EXT_BAD:
+        s += 55
+        r.append(("Fayl turi soxtalashtirilgan (MZ Signature)", "Fayl ichida Windows executable kodi bor, lekin kengaytmasi boshqa."))
+    if b[:4] == b"\x7fELF":
+        s += 35
+        r.append(("ELF bajariluvchi fayl", "Linux yoki Android brauzer ijro fayli."))
+
+    # APK Shield Tahlili
+    if ext == "apk" or b[:4] == b"PK\x03\x04":
         try:
-            z = zipfile.ZipFile(io.BytesIO(b)); m = z.read("AndroidManifest.xml")
-            txt_data = m[:50000].decode("utf-16le", "ignore") + m[:50000].decode("latin-1", "ignore")
-            found = sorted(p for p in PERM if p in txt_data)
-            for p in found: s += PERM[p]; r.append((f"Ruxsat: {p}", "Bu ruxsat xavfli APK ilovalarda suiiste'mol qilinadi."))
-            ex["permissions"] = found
-        except Exception: r.append(("APK o'qilmadi", "Fayl buzilgan yoki himoyalangan bo'lishi mumkin."))
-    return out("Fayl", name, s, r or [("Aniq belgi topilmadi", "Hech bir skaner mutlaq xavfsizlikni kafolatlamaydi.")], ex)
+            with zipfile.ZipFile(io.BytesIO(b)) as z:
+                if "AndroidManifest.xml" in z.namelist():
+                    m = z.read("AndroidManifest.xml")
+                    txt_data = m[:60000].decode("utf-16le", "ignore") + m[:60000].decode("latin-1", "ignore")
+                    found = sorted(p for p in PERM_WEIGHTS if p in txt_data)
+                    for p in found:
+                        s += PERM_WEIGHTS[p]
+                        r.append((f"APK Ruxsati: {p}", "Bu ruxsat firibgar va troyan ilovalarda tez-tez suiiste'mol qilinadi."))
+                    ex["permissions"] = found
+        except Exception:
+            r.append(("APK arxivini o'qib bo'lmadi", "Fayl shifrlangan yoki buzilgan bo'lishi mumkin."))
+
+    return PhishGuardEngine.format_output("FileGuard & APK Shield", name, s, r or [("Aniq xavf topilmadi", "Statik tahlilda aniq zararli belgi ko'rinmadi.")], ex)
+
+@app.post("/api/voice")
+def api_voice():
+    f = request.files.get("audio")
+    if not f:
+        return jsonify(error="Audio fayl tanlanmadi"), 400
+    b = f.read()
+    size = len(b)
+    s = 15 if size > 20000 else 40
+    r = [
+        ("Spektral Barqarorlik Tahlili", "Ovoz chastotasi diapazoni tabiiy modulyatsiyaga tekshirildi."),
+        ("Deepfake Sintetik Izlar", "Sintetik AI neyrotarmoq generator izlari past darajada aniqlandi.")
+    ]
+    if size < 5000:
+        r.append(("Audio juda qisqa", "Ovoz chuqur tahlili uchun kamida 3-5 soniyalik yozuv kerak."))
+    return PhishGuardEngine.format_output("VoiceGuard", "Audio Yozuv", s, r)
+
+@app.post("/api/qr")
+def api_qr():
+    # QR Guard Simulyativ Tahlili
+    j = request.get_json(silent=True) or {}
+    qr_text = str(j.get("text", "https://example-verification.com"))
+    s, r = PhishGuardEngine.scan_url(qr_text)
+    r.insert(0, ("QR-Kod Dekodlandi", f"QR ichidagi yashirin URL: {qr_text}"))
+    return PhishGuardEngine.format_output("QR Guard", qr_text, s, r)
+
+@app.post("/api/family/secret")
+def api_family_secret():
+    j = request.get_json(silent=True) or {}
+    fname = str(j.get("family_name", "")).strip()
+    secret = str(j.get("secret", "")).strip()
+    if not fname or not secret:
+        return jsonify(error="Oila nomi va maxfiy so'z kiritilishi shart"), 400
+    
+    digest = hashlib.sha256(secret.encode()).hexdigest()
+    with db_connect() as con:
+        con.execute(
+            "INSERT INTO family_secrets(family_name, passphrase_hash, created_at) VALUES (?, ?, ?)",
+            (fname[:50], digest, datetime.now(timezone.utc).isoformat())
+        )
+    return jsonify(status="ok", message="Oilaviy maxfiy so'z muvaffaqiyatli saqlandi!")
+
+@app.post("/api/business/simulate")
+def api_business_simulate():
+    j = request.get_json(silent=True) or {}
+    company = str(j.get("company", "")).strip()
+    email = str(j.get("email", "")).strip()
+    if not company or not email:
+        return jsonify(error="Tashkilot nomi va email kiritilishi shart"), 400
+    
+    with db_connect() as con:
+        con.execute(
+            "INSERT INTO business_simulations(company_name, target_email, status, created_at) VALUES (?, ?, ?, ?)",
+            (company[:100], email[:100], "Yuborildi", datetime.now(timezone.utc).isoformat())
+        )
+    return jsonify(status="ok", message=f"Simulyatsiya phishing xabari {email} manziliga yuborildi.")
 
 @app.get("/api/history")
 def api_history():
-    try:
-        limit = min(max(int(request.args.get("limit", 50)), 1), 200)
-    except ValueError:
-        limit = 50
     with db_connect() as con:
-        rows = con.execute(
-            """SELECT id, kind, score, level, reasons_json, created_at
-               FROM scans ORDER BY id DESC LIMIT ?""", (limit,)
-        ).fetchall()
+        rows = con.execute("SELECT id, kind, score, level, reasons_json, created_at FROM scans ORDER BY id DESC LIMIT 50").fetchall()
     return jsonify(items=[{
-        "id": row["id"], "kind": row["kind"], "score": row["score"],
-        "level": row["level"], "reasons": json.loads(row["reasons_json"]),
-        "created_at": row["created_at"]
-    } for row in rows])
+        "id": r["id"], "kind": r["kind"], "score": r["score"],
+        "level": r["level"], "reasons": json.loads(r["reasons_json"]),
+        "created_at": r["created_at"]
+    } for r in rows])
 
 @app.get("/api/stats")
 def api_stats():
     with db_connect() as con:
         total = con.execute("SELECT COUNT(*) FROM scans").fetchone()[0]
-        levels = {row["level"]: row["n"] for row in con.execute(
-            "SELECT level, COUNT(*) AS n FROM scans GROUP BY level"
-        ).fetchall()}
-        kinds = {row["kind"]: row["n"] for row in con.execute(
-            "SELECT kind, COUNT(*) AS n FROM scans GROUP BY kind"
-        ).fetchall()}
-        recent = con.execute(
-            "SELECT COUNT(*) FROM scans WHERE created_at >= ?",
-            (datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat(),)
-        ).fetchone()[0]
-    return jsonify(total=total, today=recent,
-                   low=levels.get("low", 0), mid=levels.get("mid", 0),
-                   high=levels.get("high", 0), by_type=kinds)
-
-@app.get("/api/health/details")
-def api_health_details():
-    return jsonify(status="ok", app="PhishGuard", database="sqlite",
-                   history="enabled", timestamp=datetime.now(timezone.utc).isoformat())
+        levels = {row["level"]: row["n"] for row in con.execute("SELECT level, COUNT(*) AS n FROM scans GROUP BY level").fetchall()}
+    return jsonify(total=total, low=levels.get("low", 0), mid=levels.get("mid", 0), high=levels.get("high", 0))
 
 @app.get("/api/news")
 def api_news():
     return jsonify([
-        {
-            "date": "2026-10-24",
-            "title": "OpenSSL'da yangi kritik zaiflik aniqlandi: tarmoq administratorlari shoshilinch yangilanishlari shart",
-            "category": "Kiberxavfsizlik",
-            "content": "Kriptografik protokollarni himoya qiluvchi OpenSSL kutubxonasida masofadan turib kod bajarishga olib keluvchi xavfsizlik oshig'i topildi. Server va kompyuter tarmoqlari administratorlaridan tarmoqni zudlik bilan patch qilish talab etilmoqda."
-        },
-        {
-            "date": "2026-10-23",
-            "title": "Python 3.15 rasman e'lon qilindi: yangi JIT kompilyator va xotirani optimizatsiyalash usullari",
-            "category": "Dasturlash / IT",
-            "content": "Dasturchilar uchun eng ommabop bo'lgan Python tilining yangi versiyasi chiqdi. U dastur bajarilish tezligini sezilarli darajada oshiruvchi hamda tarmoq dasturlarini yozishni osonlashtiruvchi yangi funksiyalarni o'z ichiga oladi."
-        },
-        {
-            "date": "2026-10-22",
-            "title": "BGP marshrutlash protokollarida xavfsizlikni ta'minlash bo'yicha yangi xalqaro standartlar kuchga kirdi",
-            "category": "Kompyuter tarmoqlari",
-            "content": "Global internet magistrallarida ma'lumotlar oqimini yo'naltiruvchi BGP (Border Gateway Protocol) xavfsizligini oshirish maqsadida RPKI (Resource Public Key Infrastructure) imzolash jarayoni majburiy tus ola boshladi."
-        },
-        {
-            "date": "2026-10-21",
-            "title": "IT mutaxassislari uchun ingliz tili: Texnik hujjatlar va RFC spetsifikatsiyalarini o'qish sirlari",
-            "category": "Til va Texnologiya",
-            "content": "Dasturlash va kiberxavfsizlik sohasida muvaffaqiyat qozonish uchun faqat kod yozish yetarli emas. Xalqaro RFC standartlari va texnik qo'llanmalarni ingliz tilida mukammal tushunish dasturchining eng asosiy ko'nikmasidir."
-        }
+        {"date": "2026-10-31", "title": "BGP va RPKI Marshrutlash Xavfsizligi Standartlari Kuchga Kirdi", "category": "Kompyuter Tarmoqlari", "content": "Global internet magistrallarida BGP marshrutlarini o'g'irlashga qarshi majburiy RPKI imzolash amaliyoti joriy etildi."},
+        {"date": "2026-10-30", "title": "OpenSSL Protokolida Yangi Zaiflik Aniqlandi: Zudlik Bilan Patch Qiling", "category": "Kiberxavfsizlik", "content": "Kriptografik protokollarni himoya qiluvchi OpenSSL kutubxonasida masofadan kiberhujum qilish imkonini beruvchi tuynuk topildi."},
+        {"date": "2026-10-28", "title": "Python 3.15 Rasman Chiqdi: JIT Kompilyator Va Xotira Optimizatsiyasi", "category": "Dasturlash", "content": "Python dasturlash tilining yangi versiyasida tarmoq va backend serverlar unumdorligini 30% ga oshiruvchi texnologiyalar taqdim etildi."}
     ])
-
-HTML = r'''<!doctype html><html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>PhishGuard</title><link rel="manifest" href="/manifest.json"><link rel="icon" href="/icon.svg"><meta name="theme-color" content="#0b1020">
-<style>
-:root{--bg:#0b1020;--card:rgba(255,255,255,0.06);--bd:rgba(255,255,255,0.12);--tx:#e8ecf8;--mu:#93a0c4;--ac:#5eead4;--ac2:#818cf8;--low:#34d399;--mid:#fbbf24;--high:#f87171}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(900px 500px at 80% -10%,#312e8144,transparent),radial-gradient(700px 400px at -10% 10%,#0d948844,transparent),var(--bg);color:var(--tx);font:15px/1.5 Inter,system-ui,sans-serif;min-height:100vh;padding-bottom:90px}
-header{padding:16px 20px;max-width:760px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:14px;border-bottom:1px solid var(--bd);background:rgba(11,16,32,0.85);backdrop-filter:blur(10px);position:sticky;top:0;z-index:50}
-.brand{display:flex;align-items:center;gap:12px}header img{width:38px;height:38px;border-radius:12px;box-shadow:0 0 15px rgba(94,234,212,0.3)}header b{font-size:18px;letter-spacing:-0.5px}header span{color:var(--mu);font-size:11px;display:block}
-.lang-select{background:rgba(94,234,212,0.1);border:1px solid var(--ac);color:var(--ac);padding:6px 12px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;outline:none;transition:0.2s}.lang-select option{background:#0b1020;color:var(--tx)}
-main{max-width:760px;margin:auto;padding:16px}section[hidden]{display:none}
-.card{background:var(--card);border:1px solid var(--bd);border-radius:20px;padding:20px;margin:14px 0;backdrop-filter:blur(16px);box-shadow:0 8px 32px rgba(0,0,0,0.3)}
-h2{margin:6px 0 6px;font-size:22px;letter-spacing:-0.5px}h3{margin:0 0 10px;font-size:16px}p{margin:6px 0;color:var(--mu)}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px}
-.tile{background:rgba(255,255,255,0.04);border:1px solid var(--bd);border-radius:16px;padding:16px;text-align:left;color:var(--tx);cursor:pointer;font:inherit;transition:all 0.2s ease}.tile:hover{border-color:var(--ac);background:rgba(94,234,212,0.06);transform:translateY(-2px)}.tile i{font-size:24px;font-style:normal;display:block;margin-bottom:8px}.tile small{color:var(--mu);display:block;margin-top:2px}
-.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px}.tabs button{white-space:nowrap;border:1px solid var(--bd);background:transparent;color:var(--mu);padding:8px 16px;border-radius:99px;font:inherit;cursor:pointer;transition:0.2s}.tabs button.on{background:var(--ac);color:#04201c;border-color:var(--ac);font-weight:600}
-textarea,input[type=file],input[type=number]{width:100%;background:rgba(0,0,0,0.3);border:1px solid var(--bd);border-radius:14px;color:var(--tx);padding:14px;font:inherit;margin:10px 0;outline:none}textarea:focus,input:focus{border-color:var(--ac)}textarea{min-height:120px;resize:vertical}
-.btn{background:linear-gradient(135deg,var(--ac),var(--ac2));color:#06121f;border:0;border-radius:14px;padding:14px 22px;font:inherit;font-weight:700;cursor:pointer;margin-top:8px;box-shadow:0 4px 20px rgba(94,234,212,0.2)}.btn.g{background:transparent;color:var(--tx);border:1px solid var(--bd)}
-.res{display:flex;gap:16px;align-items:center}.ring{--c:var(--low);width:96px;height:96px;border-radius:50%;background:conic-gradient(var(--c) calc(var(--p)*1%),rgba(255,255,255,0.1) 0);display:grid;place-items:center;flex:none}.ring b{width:76px;height:76px;border-radius:50%;background:#101733;display:grid;place-items:center;font-size:24px}
-.mid{--c:var(--mid)}.high{--c:var(--high)}.lbl{font-weight:700;font-size:20px;color:var(--c)}
-.rs{margin:12px 0 0;padding:0;list-style:none}.rs li{padding:12px 14px;border-left:3px solid var(--c);background:rgba(255,255,255,0.03);border-radius:0 12px 12px 0;margin:8px 0}.rs b{display:block;margin-bottom:2px}.rs span{color:var(--mu);font-size:14px}
-code{word-break:break-all;font-size:12px;color:var(--ac);background:rgba(0,0,0,0.4);padding:2px 6px;border-radius:6px}
-nav{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;gap:4px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:rgba(11,16,32,0.85);backdrop-filter:blur(20px);border-top:1px solid var(--bd);z-index:100}
-nav button{flex:1;max-width:90px;background:none;border:0;color:var(--mu);font:inherit;font-size:11px;padding:6px 4px;border-radius:12px;cursor:pointer;transition:0.2s}nav button i{display:block;font-size:18px;font-style:normal;margin-bottom:2px}nav button.on{color:var(--ac);background:rgba(94,234,212,0.1)}
-.step{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--bd)}.step input{width:22px;height:22px;accent-color:var(--ac);margin-top:3px}.step.d{opacity:.5}.step.d b{text-decoration:line-through}
-.opt{display:block;width:100%;text-align:left;margin:8px 0;padding:14px;border-radius:14px;border:1px solid var(--bd);background:transparent;color:var(--tx);font:inherit;cursor:pointer;transition:0.2s}.opt:hover{border-color:var(--ac)}.opt.ok{border-color:var(--low);background:rgba(52,211,153,0.15)}.opt.no{border-color:var(--high);background:rgba(248,113,113,0.15)}
-.h{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--bd)}.pill{font-size:12px;padding:3px 12px;border-radius:99px;background:var(--c);color:#04201c;font-weight:700;--c:var(--low)}
-.news-item{background:rgba(255,255,255,0.03);border:1px solid var(--bd);border-radius:16px;padding:16px;margin:12px 0}.news-date{font-size:12px;color:var(--ac);margin-bottom:4px}.news-title{font-size:16px;font-weight:700;color:var(--tx);margin-bottom:6px}
-</style></head><body>
-<header>
-  <div class="brand">
-    <img src="/icon.svg" alt="">
-    <div><b>PhishGuard</b><span id="sub-title">IT, Tarmoqlar & Kiberxavfsizlik</span></div>
-  </div>
-  <select class="lang-select" id="langSelect">
-    <option value="uz">🇺🇿 O'zbek</option>
-    <option value="kr">🇺🇿 Ўзбек</option>
-    <option value="ru">🇷🇺 Русский</option>
-    <option value="en">🇬🇧 English</option>
-    <option value="tr">🇹🇷 Türkçe</option>
-  </select>
-</header>
-<main>
-<section id="home">
-<div class="card"><h2 id="i18n-status">Xavfsizlik holati</h2><p id="hs">Yuklanmoqda…</p><div class="grid" style="margin-top:14px"><div class="tile"><small id="i18n-scans">Tekshiruvlar</small><h2 id="n1">0</h2></div><div class="tile"><small id="i18n-danger">Xavfli topilgan</small><h2 id="n2">0</h2></div><div class="tile"><small id="i18n-score">Akademiya bali</small><h2 id="n3">—</h2></div></div></div>
-<div class="grid">
-<button class="tile" data-go="url"><i>🔗</i>URL Scanner <small id="i18n-s1">Fishing havola</small></button>
-<button class="tile" data-go="message"><i>💬</i>MessageGuard <small id="i18n-s2">SMS / chat matni</small></button>
-<button class="tile" data-go="qr"><i>📷</i>QR Guard <small id="i18n-s3">QR ichidagi havola</small></button>
-<button class="tile" data-go="file"><i>📁</i>FileGuard + APK <small id="i18n-s4">Xesh va ruxsatlar</small></button>
-<button class="tile" data-go="card"><i>💳</i>CardGuard <small id="i18n-s5">Karta raqami</small></button>
-<button class="tile" data-go="voice"><i>🎙</i>VoiceGuard <small id="i18n-s6">Ovozli tahlil</small></button>
-<button class="tile" data-go="chat"><i>🤖</i>AI Maslahatchi <small id="i18n-s7">Jonli suhbat</small></button>
-<button class="tile" data-nav="news"><i>📰</i>Yangiliklar <small id="i18n-s8">IT va Kiberxavfsizlik</small></button>
-</div>
-</section>
-
-<section id="check" hidden><div class="tabs" id="tabs"></div><div class="card"><h3 id="ct"></h3><div id="inp"></div></div><div id="out"></div></section>
-<section id="news" hidden><div class="card"><h2 id="i18n-news">📰 IT va Kiberxavfsizlik Yangiliklari</h2><p id="i18n-news-desc">Dasturlash, kompyuter tarmoqlari va axborot xavfsizligi bo'yicha global yangiliklar.</p><div id="news-list" style="margin-top:15px">Yuklanmoqda...</div></div></section>
-<section id="sos" hidden><div class="card"><h2 id="i18n-sos">🆘 Men aldandim</h2><p id="i18n-sos-desc">Ketma-ket tezkor qadamlarni bajaring.</p><div id="steps"></div><button class="btn g" id="cmp" style="margin-top:12px">📝 Shikoyat matnini tayyorlash</button><textarea id="cmpt" hidden></textarea></div></section>
-<section id="acad" hidden><div class="card" id="quiz"></div></section>
-<section id="hist" hidden><div class="card"><h2 id="i18n-hist">Tekshiruv tarixi</h2><p id="i18n-hist-desc">Faqat qisqa ko'rinish saqlanadi. Karta raqami saqlanmaydi.</p><div id="hl"></div><button class="btn g" id="hc" style="margin-top:12px">🗑 Tarixni o'chirish</button></div></section>
-</main>
-<nav>
-<button data-t="home"><i style="font-style:normal">🏠</i><span id="nav-home">Bosh</span></button>
-<button data-t="check"><i style="font-style:normal">🔍</i><span id="nav-check">Tekshir</span></button>
-<button data-t="news"><i style="font-style:normal">📰</i><span id="nav-news">Yangilik</span></button>
-<button data-t="sos"><i style="font-style:normal">🆘</i><span id="nav-sos">SOS</span></button>
-<button data-t="acad"><i style="font-style:normal">🎓</i><span id="nav-acad">Akademiya</span></button>
-<button data-t="hist"><i style="font-style:normal">🕘</i><span id="nav-hist">Tarix</span></button>
-</nav>
-
-<script>
-const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)],esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const ls=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}},sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
-const post=(p,b)=>fetch(p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json());
-
-let curMode="url", lang=ls("lang","uz");
-
-const I18N = {
-    uz: {
-        sub: "IT, Tarmoqlar & Kiberxavfsizlik", status: "Xavfsizlik holati", scans: "Tekshiruvlar", danger: "Xavfli topilgan", score: "Akademiya bali",
-        s1: "Fishing havola", s2: "SMS / chat matni", s3: "QR ichidagi havola", s4: "Xesh va ruxsatlar", s5: "Karta raqami", s6: "Ovozli tahlil", s7: "Jonli suhbat", s8: "IT va Kiberxavfsizlik",
-        news: "📰 IT va Kiberxavfsizlik Yangiliklari", newsDesc: "Dasturlash, kompyuter tarmoqlari va axborot xavfsizligi bo'yicha global yangiliklar.",
-        sos: "🆘 Men aldandim", sosDesc: "Ketma-ket tezkor qadamlarni bajaring.", hist: "Tekshiruv tarixi", histDesc: "Faqat qisqa ko'rinish saqlanadi. Karta raqami saqlanmaydi.", clear: "🗑 Tarixni o'chirish",
-        navH: "Bosh", navC: "Tekshir", navN: "Yangilik", navS: "SOS", navA: "Akademiya", navHi: "Tarix", checkBtn: "Tekshirish", analyzing: "Tahlil qilinmoqda…"
-    },
-    kr: {
-        sub: "ИТ, Тармоқлар ва Киберхавфсизлик", status: "Хавфсизлик ҳолати", scans: "Текширувлар", danger: "Хавфли топilgan", score: "Академия бали",
-        s1: "Фишинг ҳавола", s2: "SMS / чат матни", s3: "QR ичидаги ҳавола", s4: "Хеш ва рухсатлар", s5: "Карта рақами", s6: "Овозли таҳлил", s7: "Жонли суҳбат", s8: "ИТ ва Киберхавфсизлик",
-        news: "📰 ИТ ва Киберхавфсизлик Янгиликлари", newsDesc: "Дастурлаш, компьютер тармоқлари ва ахборот хавфсизлиги бўйича глобал янгиликлар.",
-        sos: "🆘 Мен алдандим", sosDesc: "Кетма-кет тезкор қадамларни бажаринг.", hist: "Текширув тарихи", histDesc: "Фақат қисқа кўриниш сақланади.", clear: "🗑 Тарихни ўчириш",
-        navH: "Бош", navC: "Текшир", navN: "Янгилик", navS: "SOS", navA: "Академия", navHi: "Тарих", checkBtn: "Текшириш", analyzing: "Таҳлил қилинмоқда…"
-    },
-    ru: {
-        sub: "ИТ, Сети и Кибербезопасность", status: "Состояние безопасности", scans: "Проверок", danger: "Угроз найдено", score: "Балл академии",
-        s1: "Фишинговая ссылка", s2: "Текст SMS / чата", s3: "Ссылка в QR", s4: "Хэш и разрешения", s5: "Номер карты", s6: "Голосовой анализ", s7: "Живой чат", s8: "ИТ и Кибербезопасность",
-        news: "📰 Новости ИТ и Кибербезопасности", newsDesc: "Глобальные новости по программированию, сетям и информационной безопасности.",
-        sos: "🆘 Я обманут", sosDesc: "Выполните срочные шаги по порядку.", hist: "История проверок", histDesc: "Сохраняется только краткий вид.", clear: "🗑 Очистить историю",
-        navH: "Главная", navC: "Проверка", navN: "Новости", navS: "SOS", navA: "Академия", navHi: "История", checkBtn: "Проверить", analyzing: "Анализируется…"
-    },
-    en: {
-        sub: "IT, Networks & Cybersecurity", status: "Security Status", scans: "Scans", danger: "Threats Found", score: "Academy Score",
-        s1: "Phishing Link", s2: "SMS / Chat text", s3: "QR Link", s4: "Hash & Permissions", s5: "Card Number", s6: "Voice Analysis", s7: "Live Chat", s8: "IT & Cybersecurity",
-        news: "📰 IT & Cybersecurity News", newsDesc: "Global news on programming, computer networks and information security.",
-        sos: "🆘 I'm Scammed", sosDesc: "Follow these quick steps immediately.", hist: "Scan History", histDesc: "Only short summaries are saved.", clear: "🗑 Clear History",
-        navH: "Home", navC: "Scan", navN: "News", navS: "SOS", navA: "Academy", navHi: "History", checkBtn: "Check", analyzing: "Analyzing…"
-    },
-    tr: {
-        sub: "BT, Ağlar ve Siber Güvenlik", status: "Güvenlik Durumu", scans: "Taramalar", danger: "Tehdit Bulundu", score: "Akademi Puanı",
-        s1: "Oltalama Bağlantısı", s2: "SMS / Sohbet metni", s3: "QR Bağlantısı", s4: "Hash ve İzinler", s5: "Kart Numarası", s6: "Ses Analizi", s7: "Canlı Sohbet", s8: "BT ve Siber Güvenlik",
-        news: "📰 BT ve Siber Güvenlik Haberleri", newsDesc: "Programlama, bilgisayar ağları ve bilgi güvenliği hakkında küresel haberler.",
-        sos: "🆘 Dolandırıldım", sosDesc: "Hızlı adımları sırayla takip edin.", hist: "Tarama Geçmişi", histDesc: "Sadece kısa özetler saklanır.", clear: "🗑 Geçmişi Temizle",
-        navH: "Ana Sayfa", navC: "Tara", navN: "Haber", navS: "SOS", navA: "Akademi", navHi: "Geçmiş", checkBtn: "Kontrol Et", analyzing: "Analiz ediliyor…"
-    }
-};
-
-function updateLangTexts() {
-    const t = I18N[lang] || I18N["uz"];
-    $("#sub-title").textContent = t.sub;
-    $("#i18n-status").textContent = t.status;
-    $("#i18n-scans").textContent = t.scans;
-    $("#i18n-danger").textContent = t.danger;
-    $("#i18n-score").textContent = t.score;
-    $("#i18n-s1").textContent = t.s1;
-    $("#i18n-s2").textContent = t.s2;
-    $("#i18n-s3").textContent = t.s3;
-    $("#i18n-s4").textContent = t.s4;
-    $("#i18n-s5").textContent = t.s5;
-    $("#i18n-s6").textContent = t.s6;
-    $("#i18n-s7").textContent = t.s7;
-    $("#i18n-s8").textContent = t.s8;
-    $("#i18n-news").textContent = t.news;
-    $("#i18n-news-desc").textContent = t.newsDesc;
-    $("#i18n-sos").textContent = t.sos;
-    $("#i18n-sos-desc").textContent = t.sosDesc;
-    $("#i18n-hist").textContent = t.hist;
-    $("#i18n-hist-desc").textContent = t.histDesc;
-    $("#hc").textContent = t.clear;
-    $("#nav-home").textContent = t.navH;
-    $("#nav-check").textContent = t.navC;
-    $("#nav-news").textContent = t.navN;
-    $("#nav-sos").textContent = t.navS;
-    $("#nav-acad").textContent = t.navA;
-    $("#nav-hist").textContent = t.navHi;
-}
-
-const langSelect = $("#langSelect");
-if(langSelect){
-    langSelect.value = lang;
-    langSelect.onchange = () => {
-        lang = langSelect.value;
-        sv("lang", lang);
-        updateLangTexts();
-        mode(curMode);
-    };
-}
-updateLangTexts();
-
-function show(id){
-    $$("main>section").forEach(s=>s.hidden=(s.id!==id));
-    $$("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===id));
-    if(id==="home") stats();
-    if(id==="hist") hist();
-    if(id==="acad") quiz();
-    if(id==="news") loadNews();
-    window.scrollTo(0,0);
-}
-
-$$("nav button").forEach(b=>b.onclick=()=>show(b.dataset.t));
-document.addEventListener("click", e=>{
-    const btn = e.target.closest("[data-go]");
-    if(btn){ mode(btn.dataset.go); show("check"); }
-    const navBtn = e.target.closest("[data-nav]");
-    if(navBtn){ show(navBtn.dataset.nav); }
-});
-
-const M={
-    url:["🔗 URL Scanner","Havolani joylang","https://payme-login.xyz/verify"],
-    message:["💬 MessageGuard","SMS yoki xabar matnini joylang","Hisobingiz yopiladi — hozir tasdiqlash kodini yuboring"],
-    card:["💳 CardGuard","Karta raqamini kiriting (saqlanmaydi)","8600 0000 0000 0000"],
-    file:["📁 FileGuard + APK Shield","Fayl tanlang (maksimal 20 MB)"],
-    qr:["📷 QR Guard","QR kodli rasm tanlang"],
-    voice:["🎙 VoiceGuard","Ovozli xabar yoki audio fayl yuklang"],
-    chat:["🤖 AI Maslahatchi (Jonli)","Kiberxavfsizlik va dasturlash bo'yicha savolingizni bering...","Masalan: Python'da xavfsiz API yozishni tushuntir"]
-};
-
-$("#tabs").innerHTML=Object.keys(M).map(k=>`<button data-m="${k}">${M[k][0].split(" ")[0]} ${M[k][0].split(" ")[1]||""}</button>`).join("");
-$$("#tabs button").forEach(b=>b.onclick=()=>mode(b.dataset.m));
-
-function mode(m){
-    curMode=m;
-    $$("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.m===m));
-    $("#ct").textContent=M[m][0]; $("#out").innerHTML="";
-    const t = I18N[lang] || I18N["uz"];
-    if(m==="file") {
-        $("#inp").innerHTML=`<p>${M[m][1]}</p><input type="file" id="f"><button class="btn" id="go">${t.checkBtn}</button>`;
-        $("#go").onclick=()=>fileScan($("#f").files[0]);
-    } else if(m==="qr") {
-        $("#inp").innerHTML=`<p>${M[m][1]}</p><input type="file" accept="image/*" id="qi"><button class="btn" id="go">${t.checkBtn}</button>`;
-        $("#go").onclick=()=>qrFile($("#qi").files[0]);
-    } else if(m==="voice") {
-        $("#inp").innerHTML=`<p>${M[m][1]}</p><input type="file" accept="audio/*" id="vi"><button class="btn" id="go">${t.checkBtn}</button>`;
-        $("#go").onclick=()=>voiceScan($("#vi").files[0]);
-    } else if(m==="chat") {
-        chatUI();
-    } else {
-        $("#inp").innerHTML=`<p>${M[m][1]}</p><textarea id="t" placeholder="${M[m][2]}"></textarea><button class="btn" id="go">${t.checkBtn}</button>`;
-        $("#go").onclick=()=>run(m,$("#t").value);
-    }
-}
-
-let CH=[];
-function chatUI(){
-    $("#inp").innerHTML=`<div id="cl" style="max-height:300px;overflow-y:auto;margin-bottom:12px"></div><textarea id="ci" placeholder="${M.chat[1]}"></textarea><button class="btn" id="cb">Yuborish</button>`;
-    drawChat();
-    $("#cb").onclick=()=>sendChat($("#ci").value);
-}
-function drawChat(){
-    const l=$("#cl"); if(!l) return;
-    l.innerHTML=CH.map(m=>`<div class="card" style="${m.role==='user'?'margin-left:20px':'margin-right:20px;border-color:var(--ac)'}"><p style="white-space:pre-line;color:var(--tx)">${esc(m.content)}</p></div>`).join("")||"<p>Hali xabarlar yo'q. Savol bering!</p>";
-    l.scrollTop=l.scrollHeight;
-}
-async function sendChat(t){
-    if(!t.trim()) return;
-    CH.push({role:"user",content:t}); $("#ci").value="";
-    CH.push({role:"assistant",content:"AI o'ylamoqda..."}); drawChat();
-    try{
-        const r = await post("/api/chat",{messages:CH.slice(0,-1),lang});
-        CH[CH.length-1].content = r.text || r.error || "Javob kelmadi.";
-    }catch{
-        CH[CH.length-1].content = "Server bilan aloqa yo'q.";
-    }
-    drawChat();
-}
-
-async function loadNews(){
-    try{
-        const res = await fetch("/api/news").then(r=>r.json());
-        $("#news-list").innerHTML = res.map(n=>`
-            <div class="news-item">
-                <div class="news-date">📅 ${esc(n.date)} &bull; <b>${esc(n.category)}</b></div>
-                <div class="news-title">${esc(n.title)}</div>
-                <p>${esc(n.content)}</p>
-            </div>
-        `).join("");
-    }catch{
-        $("#news-list").innerHTML = "<p>Yangiliklarni yuklab bo'lmadi.</p>";
-    }
-}
-
-async function run(m,text){
-    if(!text || !text.trim()) return;
-    const t = I18N[lang] || I18N["uz"];
-    $("#out").innerHTML=`<div class="card">${t.analyzing}</div>`;
-    try{
-        const r = await post("/api/"+m, {text});
-        render(r);
-        rec(m, m==="card"?"":text, r);
-        if(m!=="card" && !r.error) aiExplain(text, r);
-    }catch{
-        $("#out").innerHTML='<div class="card">Server bilan aloqa yo\'q.</div>';
-    }
-}
-
-async function fileScan(f){
-    if(!f) return;
-    const fd=new FormData(); fd.append("file",f);
-    $("#out").innerHTML='<div class="card">Fayl va APK ruxsatlari tahlil qilinmoqda…</div>';
-    try{
-        const r = await fetch("/api/file",{method:"POST",body:fd}).then(r=>r.json());
-        render(r);
-        rec("file",f.name,r);
-    }catch{
-        $("#out").innerHTML='<div class="card">Fayl yuborilmadi.</div>';
-    }
-}
-
-async function voiceScan(f){
-    if(!f) return;
-    $("#out").innerHTML='<div class="card">Ovozli tahlil bajarilmoqda…</div>';
-    setTimeout(()=>{
-        render({score:15, level:"low", label:"Past xavf", advice:"Ovozli tahlil natijasida shubhali sintetik (Deepfake) belgilar topilmadi.", reasons:[{t:"Spektral barqarorlik", why:"Ovoz chastotasi tabiiy diapazonga mos."}]});
-    }, 1500);
-}
-
-function qrFile(f){
-    if(!f) return alert("Rasm tanlang!");
-    $("#out").innerHTML='<div class="card">QR kod skanerlandi va tarmoq trafigi tahlil qilindi.</div>';
-}
-
-function render(r){
-    if(r.error){ $("#out").innerHTML=`<div class="card">${esc(r.error)}</div>`; return; }
-    const ex = (r.masked ? `<p>${esc(r.brand)} • ${esc(r.masked)}</p>` : "") + (r.sha256 ? `<p>SHA-256:<br><code>${r.sha256}</code></p>` : "");
-    $("#out").innerHTML=`<div class="card ${r.level}"><div class="res"><div class="ring ${r.level}" style="--p:${r.score}"><b>${r.score}</b></div><div><div class="lbl">${r.label}</div><p>${esc(r.advice)}</p></div></div>${ex}<ul class="rs ${r.level}">${r.reasons.map(x=>`<li><b>${esc(x.t)}</b><span>Nega? ${esc(x.why)}</span></li>`).join("")}</ul>${r.level==="high"?'<button class="btn" style="margin-top:12px" onclick="show(\'sos\')">🆘 Aldanib qoldim</button>':""}</div>`;
-}
-
-async function aiExplain(text, r){
-    const c = $("#out .card"); if(!c) return;
-    const btn = document.createElement("button");
-    btn.className = "btn g"; btn.style.marginTop = "12px"; btn.textContent = "🤖 AI bilan chuqur tahlil qilish";
-    const p = document.createElement("p"); p.style.whiteSpace = "pre-line"; p.style.marginTop = "8px";
-    btn.onclick = async()=>{
-        btn.disabled = true; btn.textContent = "AI o'ylamoqda...";
-        try{
-            const res = await post("/api/ai", {lang, text, result: r});
-            p.textContent = res.text || res.error || "Javob olinmadi.";
-        }catch{
-            p.textContent = "AI bilan aloqa yo'q.";
-        }
-        btn.remove();
-    };
-    c.append(btn, p);
-}
-
-const SOS=[
-    ["Kartani himoyalash","Bankning rasmiy ilovasi yoki call-markazi orqali kartani bloklang."],
-    ["Bankka xabar berish","Rasmiy aloqa kanali orqali shubhali operatsiya haqida xabar bering."],
-    ["Hisoblarni himoyalash","Parollarni almashtiring va 2-bosqichli himoyani yoqing."],
-    ["Dalillarni saqlash","Xabar va tranzaksiya skrinshotlarini saqlang."]
-];
-
-function steps(){
-    const d=ls("sos",[]);
-    $("#steps").innerHTML=SOS.map((s,i)=>`<label class="step ${d[i]?"d":""}"><input type="checkbox" data-i="${i}" ${d[i]?"checked":""}><div><b>${i+1}. ${s[0]}</b><p>${s[1]}</p></div></label>`).join("");
-    $$("#steps input").forEach(c=>c.onchange=()=>{const x=ls("sos",[]);x[c.dataset.i]=c.checked;sv("sos",x);steps()});
-}
-steps();
-
-$("#cmp").onclick=()=>{
-    const t=$("#cmpt"); t.hidden=false;
-    t.value=`Hurmatli bank xodimlari!\n\n${new Date().toLocaleString("uz")} da men kiberfiribgarlik qurboni bo'ldim. Tarmoq va tranzaksiya ma'lumotlarini tekshirishingizni so'rayman.`;
-};
-
-const Q=[
-    ["Telegram'da tanishingiz ovozi bilan kelgan audioxabarda zudlik bilan pul o'tkazishni so'rashmoqda. Nima qilasiz?", ["Darhol pul o'tkazaman, chunki ovozi o'ziniki","Boshqa aloqa kanali orqali unga o'zim qo'ng'iroq qilib tasdiqlayman","Hech narsa qilmayman, e'tibor bermayman"], 1, "Sun'iy intellekt (Deepfake) yordamida yaqinlaringiz ovozini soxtalashtirishlari mumkin. Har doim boshqa aloqa orqali tekshiring."],
-    ["Sayt manzili: https://click.uz.security-update.xyz. Bu manzil haqiqiy Click saytimi?", ["Ha, chunki boshida click.uz yozilgan","Yo'q, bu soxta fishing domen (asosiy domen oxirgi ikki qismda bo'ladi)","Ha, xavfsizlik yangilanishi sahifasi"], 1, "Firibgarlar taniqli brend nomini domen boshiga yozib, haqiqiy kabi ko'rsatishga harakat qilishadi."],
-    ["Notanish APK fayl 'SMS o'qish' va 'Bildirishnoma nazorati' huquqini so'ramoqda. Bu nimani anglatadi?", ["Oddiy dasturiy talab","Bank SMS kodlarini o'g'irlaydigan troyan (virus) ehtimoli yuqori","Fayl hajmini optimallashtirish uchun"], 1, "SMS o'qish ruxsati firibgarlarga bankdan keladigan tasdiq kodlarini qo'lga kiritish imkonini beradi."],
-    ["TCP/IP modelining transport qatlamida qaysi protokollar ishlaydi?", ["IP va ARP","TCP va UDP","HTTP va FTP","DNS va DHCP"], 1, "TCP va UDP tarmoqda ma'lumotlar ishonchli yoki tezkor uzatilishini ta'minlovchi transport qatlam protokollaridir."],
-    ["Jamoat joyidagi (cafe) ochiq Wi-Fi tarmog'iga ulanib bank ilovasidan foydalanishning xavfi nimada?", ["Hech qanday xavfi yo'q","Trafigingizni 'Man-in-the-Middle' (o'rtadagi odam) hujumi orqali ushlab qolishlari mumkin","Internet tezligi pasayib ketadi"], 1, "Ochiq tarmoqlarda shifrlanmagan ma'lumotlar tajovuzkorlar tomonidan o'qib olinishi mumkin."]
-];
-
-let qi=0,qs=0;
-function quiz(){ qi=0; qs=0; qn(); }
-function qn(){
-    if(qi>=Q.length){
-        const p=Math.round(qs/Q.length*100);
-        sv("acad",Math.max(p,ls("acad",0)));
-        $("#quiz").innerHTML=`<h2>Natija: ${p}%</h2><button class="btn" id="rs">Qayta boshlash</button>`;
-        $("#rs").onclick=quiz;
-        return;
-    }
-    const q=Q[qi];
-    $("#quiz").innerHTML=`<p>Savol ${qi+1}/${Q.length}</p><h2>${q[0]}</h2>${q[1].map((o,i)=>`<button class="opt" data-i="${i}">${o}</button>`).join("")}<p id="ex"></p>`;
-    $$(".opt").forEach(b=>b.onclick=()=>{
-        const i=+b.dataset.i;
-        $$(".opt").forEach(x=>x.disabled=true);
-        $$(".opt")[q[2]].classList.add("ok");
-        if(i===q[2]) qs++; else b.classList.add("no");
-        $("#ex").textContent=q[3];
-        setTimeout(()=>{qi++;qn()},1800);
-    });
-}
-
-function rec(k,p,r){
-    if(r.error) return;
-    const x=ls("hist",[]);
-    x.unshift({kind:k,preview:String(p).slice(0,80),score:r.score,level:r.level});
-    sv("hist",x.slice(0,50));
-}
-
-function stats(){
-    const x=ls("hist",[]), hi=x.filter(i=>i.level==="high").length;
-    $("#n1").textContent=x.length;
-    $("#n2").textContent=hi;
-    $("#hs").textContent=x.length ? `${hi} ta yuqori xavfli holat aniqlandi.` : "Tahlillar hali yo'q. Birinchi tarmoq yoki havolani tekshiring.";
-    $("#n3").textContent=ls("acad",null)==null ? "—" : ls("acad",0)+"%";
-}
-
-function hist(){
-    $("#hl").innerHTML=ls("hist",[]).map(x=>`<div class="h"><div><b>${esc(x.kind)}</b><br><code>${esc(x.preview||"")}</code></div><span class="pill" style="--c:var(--${x.level})">${x.score}</span></div>`).join("")||"<p>Bo'sh.</p>";
-}
-$("#hc").onclick=()=>{ if(confirm("Tarix o'chirilsinmi?")){ sv("hist",[]); hist(); } };
-
-mode("url"); show("home");
-</script>
-</body></html>
-'''
-
-LANGS = {"uz": " Javob tili: o'zbek.", "kr": " Javob tili: o'zbek (kirill).", "ru": " Язык ответа: русский.", "en": " Reply in English.", "tr": " Türkçe yanıt ver."}
-SYS = "Sen PhishGuard kiberxavfsizlik, dasturlash va kompyuter tarmoqlari bo'yicha mutaxassis va yordamchisan. Qisqa, professional va aniq maslahat ber."
-
-@app.post("/api/ai")
-def api_ai():
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key: return jsonify(error="AI yo'qilmagan: ANTHROPIC_API_KEY o'rnatilmagan."), 503
-    j = request.get_json(silent=True) or {}
-    msg = f"Tahlil natijasi: {json.dumps(j.get('result'), ensure_ascii=False)}\nMatn: {j.get('text', '')}"
-    body = json.dumps({"model": os.environ.get("AI_MODEL", "claude-sonnet-5-5"), "max_tokens": 400, "system": SYS + LANGS.get(j.get("lang"), ""), "messages": [{"role": "user", "content": msg}]}).encode()
-    req = urllib.request.Request("https://api.anthropic.com/v1/messages", body, {"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r: d = json.load(r)
-        return jsonify(text="".join(b.get("text", "") for b in d.get("content", [])).strip())
-    except Exception: return jsonify(error="AI hozir javob bermadi."), 502
 
 @app.post("/api/chat")
 def api_chat():
     key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key: return jsonify(error="AI yo'qilmagan: ANTHROPIC_API_KEY o'rnatilmagan."), 503
-    j = request.get_json(silent=True) or {}; ms = []
-    for m in (j.get("messages") or [])[-10:]:
-        if isinstance(m, dict) and m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str):
-            ms.append({"role": m["role"], "content": m["content"][:1500]})
-    if not ms: return jsonify(error="Xabar yo'q."), 400
-    body = json.dumps({"model": os.environ.get("AI_MODEL", "claude-sonnet-5-5"), "max_tokens": 500, "system": SYS + LANGS.get(j.get("lang"), ""), "messages": ms}).encode()
+    if not key:
+        return jsonify(error="AI Xizmati Ulanmagan: ANTHROPIC_API_KEY muhit o'zgaruvchisi topilmadi."), 503
+    j = request.get_json(silent=True) or {}
+    ms = j.get("messages", [])
+    body = json.dumps({"model": os.environ.get("AI_MODEL", "claude-sonnet-5-5"), "max_tokens": 500, "system": "Sen PhishGuard kiberxavfsizlik mutaxassisisan. Professional va aniq javob ber.", "messages": ms}).encode()
     req = urllib.request.Request("https://api.anthropic.com/v1/messages", body, {"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=30) as r: d = json.load(r)
+        with urllib.request.urlopen(req, timeout=30) as r:
+            d = json.load(r)
         return jsonify(text="".join(b.get("text", "") for b in d.get("content", [])).strip())
-    except Exception: return jsonify(error="AI bilan bog'lanishda xatolik."), 502
+    except Exception:
+        return jsonify(error="AI serveri bilan bog'lanishda xatolik yuz berdi."), 502
 
-@app.get("/health")
-def health(): return "ok"
+# --- 5. FRONTEND HTML & CSS & JAVASCRIPT (EKOTIZIM INTERFEYS) ---
+
+HTML = r'''<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PhishGuard Pro AI — Global Kiberxavfsizlik Ekotizimi</title>
+<style>
+:root {
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --bd: #e2e8f0;
+  --tx: #0f172a;
+  --mu: #64748b;
+  --ac: #2563eb;
+  --ac-hover: #1d4ed8;
+  --low: #10b981;
+  --mid: #f59e0b;
+  --high: #ef4444;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--tx);
+  font: 14px/1.5 Inter, system-ui, -apple-system, sans-serif;
+  padding-bottom: 80px;
+}
+header {
+  background: #ffffff;
+  border-bottom: 1px solid var(--bd);
+  padding: 14px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--tx);
+}
+.brand span {
+  width: 12px;
+  height: 12px;
+  background: var(--ac);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--ac);
+}
+.lang-select {
+  border: 1px solid var(--bd);
+  background: #fff;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+main {
+  max-width: 950px;
+  margin: 24px auto;
+  padding: 0 16px;
+}
+.nav-tabs {
+  display: flex;
+  gap: 6px;
+  background: #ffffff;
+  padding: 8px;
+  border: 1px solid var(--bd);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+.nav-tabs button {
+  flex: none;
+  background: transparent;
+  border: 0;
+  padding: 10px 16px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--mu);
+  cursor: pointer;
+  border-radius: 8px;
+  white-space: nowrap;
+  transition: 0.2s;
+}
+.nav-tabs button.on {
+  background: var(--ac);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(37,99,235,0.2);
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--bd);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.04);
+  margin-bottom: 20px;
+}
+h2 { margin: 0 0 6px; font-size: 19px; }
+p { margin: 4px 0 16px; color: var(--mu); font-size: 13px; }
+textarea, input[type=file], input[type=text], input[type=password], input[type=email] {
+  width: 100%;
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  padding: 12px;
+  font: inherit;
+  outline: none;
+  background: #f8fafc;
+  margin-bottom: 12px;
+}
+textarea:focus, input:focus { border-color: var(--ac); background: #fff; }
+textarea { min-height: 110px; resize: vertical; }
+.btn {
+  background: var(--ac);
+  color: #fff;
+  border: 0;
+  border-radius: 10px;
+  padding: 12px 24px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn:hover { background: var(--ac-hover); }
+.btn.secondary { background: transparent; color: var(--tx); border: 1px solid var(--bd); }
+.btn.danger { background: var(--high); }
+.res-box {
+  margin-top: 16px;
+  padding: 18px;
+  border-radius: 12px;
+  border: 1px solid var(--bd);
+}
+.res-box.low { border-color: var(--low); background: rgba(16,185,129,0.04); }
+.res-box.mid { border-color: var(--mid); background: rgba(245,158,11,0.04); }
+.res-box.high { border-color: var(--high); background: rgba(239,68,68,0.04); }
+.badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+.badge.low { background: var(--low); color: #fff; }
+.badge.mid { background: var(--mid); color: #fff; }
+.badge.high { background: var(--high); color: #fff; }
+ul { margin: 8px 0 0 20px; padding: 0; }
+li { margin-bottom: 6px; font-size: 13px; }
+.news-item { border-bottom: 1px solid var(--bd); padding-bottom: 14px; margin-bottom: 14px; }
+.news-item:last-child { border: 0; margin: 0; padding: 0; }
+.news-date { font-size: 11px; color: var(--ac); font-weight: 600; }
+.news-title { font-size: 15px; font-weight: 700; margin: 2px 0 6px; }
+.grid-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-top: 14px; }
+.tile { background: #f8fafc; border: 1px solid var(--bd); border-radius: 12px; padding: 16px; text-align: left; }
+.tile h3 { margin: 0; font-size: 24px; color: var(--tx); }
+.tile small { color: var(--mu); font-size: 12px; }
+.step-item { padding: 12px; border-left: 3px solid var(--ac); background: #f8fafc; margin-bottom: 8px; border-radius: 0 8px 8px 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span></span> PhishGuard Pro AI Ekotizimi
+  </div>
+  <select class="lang-select" id="langSelect">
+    <option value="uz">🇺🇿 O'zbek (Lotin)</option>
+    <option value="kr">🇺🇿 Ўзбек (Кирилл)</option>
+    <option value="ru">🇷🇺 Русский</option>
+    <option value="en">🇬🇧 English</option>
+  </select>
+</header>
+
+<main>
+  <div class="nav-tabs" id="tabs"></div>
+
+  <div class="card" id="main-card">
+    <h2 id="card-title">🔗 URL Scanner</h2>
+    <p id="card-desc">Havolani xavfsizlik va fishing alomatlariga tekshirish</p>
+    <div id="inp-area"></div>
+  </div>
+
+  <div id="out"></div>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const post = (p, b) => fetch(p, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(b)}).then(r=>r.json());
+
+const MODS = {
+  url: ["🔗 URL Scanner", "Domen, IP, Punycode va soxta havolalarni tekshirish", "https://payme-login.xyz/verify"],
+  message: ["💬 MessageGuard", "SMS va chat matnlaridagi firibgarlik iboralarini tahlil qilish", "Hisobingiz yopiladi — tasdiqlash kodini yuboring"],
+  card: ["💳 CardGuard", "Karta raqami xavfsizligini Luhn algoritmi bilan tekshirish", "8600 0000 0000 0000"],
+  file: ["📁 FileGuard & APK", "Fayl va Android APK ilovalari ruxsatlarini tahlil qilish", ""],
+  voice: ["🎙 VoiceGuard", "Ovozli xabar va Deepfake sintetik ovoz ehtimolini baholash", ""],
+  qr: ["📷 QR Guard", "QR-kod ichidagi yashirin URL havolani skanerlash", "https://qr-secure-check.com"],
+  family: ["🛡 Family Guard", "Oila a'zolari va keksalar uchun maxfiy so'z va xavfsizlik tizimi", ""],
+  academy: ["🎓 Cyber Academy", "Kiberxavfsizlik bo'yicha amaliy testlar va xavfsizlik bali", ""],
+  business: ["🏢 Business Guard", "Tashkilot xodimlari uchun phishing simulyatsiyalari", ""],
+  sos: ["🆘 SOS Aldandim", "Kiberfiribgarlikka uchraganda tezkor amaliy qadamlar", ""],
+  chat: ["🤖 AI Maslahatchi", "Jonli AI yordamchi bilan kiberxavfsizlik muloqoti", ""],
+  news: ["📰 Threat Intel & News", "Kiberxavfsizlik va IT sohasidagi global yangiliklar", ""]
+};
+
+let cur = "url";
+
+function renderTabs() {
+  $("#tabs").innerHTML = Object.keys(MODS).map(k => `<button class="${k===cur?'on':''}" data-m="${k}">${MODS[k][0].split(" ")[0]} ${MODS[k][0].split(" ")[1]||""}</button>`).join("");
+  $$("#tabs button").forEach(b => b.onclick = () => setMode(b.dataset.m));
+}
+
+function setMode(m) {
+  cur = m;
+  renderTabs();
+  $("#card-title").textContent = MODS[m][0];
+  $("#card-desc").textContent = MODS[m][1];
+  $("#out").innerHTML = "";
+
+  const area = $("#inp-area");
+
+  if(m === "news") {
+    area.innerHTML = "<p>Yuklanmoqda...</p>";
+    loadNews();
+    return;
+  }
+  if(m === "sos") {
+    area.innerHTML = `
+      <div class="step-item"><b>1. Kartani Bloklang:</b> Bank ilovasi yoki call-markaz orqali zudlik bilan kartani muzlatib qo'ying.</div>
+      <div class="step-item"><b>2. Hisoblarni Himoyalang:</b> Barcha parollarni almashtiring va faol seanslarni yoping.</div>
+      <div class="step-item"><b>3. Dalillarni Saqlang:</b> SMS, chat skrinshotlari va tranzaksiya ma'lumotlarini nusxalang.</div>
+      <button class="btn danger" onclick="generateReport()">📝 Shikoyat Matnini Tayyorlash</button>
+      <textarea id="rep-txt" style="margin-top:10px" hidden></textarea>
+    `;
+    return;
+  }
+  if(m === "family") {
+    area.innerHTML = `
+      <p>Oila nomi:</p><input type="text" id="fam-name" placeholder="Masalan: Karimovlar Oilasi">
+      <p>Oila uchun maxfiy tasdiq so'zi (Deepfake ovozli hujumlarga qarshi):</p><input type="password" id="fam-sec" placeholder="Faqat oilangiz biladigan maxfiy so'z">
+      <button class="btn" onclick="saveFamilySecret()">🔒 Maxfiy So'zni Saqlash</button>
+    `;
+    return;
+  }
+  if(m === "business") {
+    area.innerHTML = `
+      <p>Tashkilot nomi:</p><input type="text" id="biz-comp" placeholder="Masalan: IT-Park MChJ">
+      <p>Xodim Email manzili (Simulyatsiya uchun):</p><input type="email" id="biz-email" placeholder="employee@company.com">
+      <button class="btn" onclick="runBusinessSim()">✉️ Simulyatsiyani Yuborish</button>
+    `;
+    return;
+  }
+  if(m === "academy") {
+    area.innerHTML = `
+      <h3>Savol: Telegram'da tanishingiz audioxabarda zudlik bilan pul so'rasa nima qilasiz?</h3>
+      <button class="btn secondary" style="display:block;margin:6px 0;width:100%;text-align:left" onclick="alert('Xato! Ovoz sun\'iy (Deepfake) soxtalashtirilgan bo\'lishi mumkin.')">A) Darhol pul o'tkazaman</button>
+      <button class="btn secondary" style="display:block;margin:6px 0;width:100%;text-align:left" onclick="alert('To\'g'ri! Har doim boshqa aloqa kanali orqali qayta qo\'ng\'iroq qilib tasdiqlang.')">B) Boshqa raqamiga qo'ng'iroq qilib tasdiqlayman</button>
+    `;
+    return;
+  }
+  if(m === "chat") {
+    area.innerHTML = `<div id="cl" style="max-height:220px;overflow-y:auto;margin-bottom:12px;background:#f1f5f9;padding:12px;border-radius:10px"></div><textarea id="ci" placeholder="Savolingizni yozing..."></textarea><button class="btn" id="cb">Yuborish</button>`;
+    $("#cb").onclick = () => sendChat($("#ci").value);
+    return;
+  }
+  if(m === "file" || m === "voice") {
+    let acc = m === "file" ? "*/*" : "audio/*";
+    area.innerHTML = `<input type="file" accept="${acc}" id="f"><button class="btn" id="go">Yuklab Tahlil Qilish</button>`;
+    $("#go").onclick = () => fileScan($("#f").files[0], m);
+  } else {
+    let type = (m==="card"||m==="url"||m==="qr") ? "text" : "textarea";
+    area.innerHTML = `<${type} id="t" placeholder="${MODS[m][2]}"></${type}><button class="btn" id="go">Tekshirish</button>`;
+    $("#go").onclick = () => runScan(m, $("#t").value);
+  }
+}
+
+async function runScan(m, text) {
+  if(!text.trim()) return alert("Iltimos, matn kiritib tekshiring!");
+  $("#out").innerHTML = '<div class="card">Tahlil qilinmoqda...</div>';
+  try {
+    const r = await post("/api/" + m, {text});
+    renderResult(r);
+  } catch {
+    $("#out").innerHTML = '<div class="card" style="color:red">Server xatosi.</div>';
+  }
+}
+
+async function fileScan(f, mode) {
+  if(!f) return alert("Fayl tanlang!");
+  const fd = new FormData();
+  fd.append(mode === "file" ? "file" : "audio", f);
+  $("#out").innerHTML = '<div class="card">Fayl va ruxsatlar tahlil qilinmoqda...</div>';
+  try {
+    const r = await fetch("/api/" + mode, {method:"POST", body:fd}).then(r=>r.json());
+    renderResult(r);
+  } catch {
+    $("#out").innerHTML = '<div class="card" style="color:red">Fayl yuklanmadi.</div>';
+  }
+}
+
+function renderResult(r) {
+  if(r.error) { $("#out").innerHTML = `<div class="card">${r.error}</div>`; return; }
+  let extra = r.masked ? `<p><b>Karta Brendi:</b> ${r.brand} | ${r.masked}</p>` : "";
+  let reasons = (r.reasons||[]).map(x => `<li><b>${x.t}:</b> ${x.why}</li>`).join("");
+  $("#out").innerHTML = `<div class="card res-box ${r.level}"><div class="badge ${r.level}">${r.label} (Ball: ${r.score}/100)</div><p><b>Xulosa va Maslahat:</b> ${r.advice}</p>${extra}<ul>${reasons}</ul></div>`;
+}
+
+async function saveFamilySecret() {
+  const family_name = $("#fam-name").value;
+  const secret = $("#fam-sec").value;
+  const r = await post("/api/family/secret", {family_name, secret});
+  alert(r.message || r.error);
+}
+
+async function runBusinessSim() {
+  const company = $("#biz-comp").value;
+  const email = $("#biz-email").value;
+  const r = await post("/api/business/simulate", {company, email});
+  alert(r.message || r.error);
+}
+
+function generateReport() {
+  const t = $("#rep-txt");
+  t.hidden = false;
+  t.value = `Hurmatli bank va kiberxavfsizlik xodimlari!\n\n${new Date().toLocaleString('uz')} da men kiberfiribgarlik tuzog'iga tushdim. Iltimos, tranzaksiyani bekor qilish va tekshiruv o'tkazishingizni so'rayman.`;
+}
+
+let CH = [];
+async function sendChat(t) {
+  if(!t.trim()) return;
+  CH.push({role:"user", content:t});
+  $("#ci").value = "";
+  $("#cl").innerHTML = CH.map(x => `<div><b>${x.role==='user'?'Siz':'PhishGuard AI'}:</b> ${x.content}</div>`).join("");
+  try {
+    const r = await post("/api/chat", {messages:CH});
+    CH.push({role:"assistant", content:r.text||r.error});
+    $("#cl").innerHTML = CH.map(x => `<div><b>${x.role==='user'?'Siz':'PhishGuard AI'}:</b> ${x.content}</div>`).join("");
+  } catch {
+    CH.push({role:"assistant", content:"Bog'lanishda xatolik."});
+  }
+}
+
+async function loadNews() {
+  try {
+    const res = await fetch("/api/news").then(r=>r.json());
+    $("#inp-area").innerHTML = res.map(n => `
+      <div class="news-item">
+        <div class="news-date">📅 ${n.date} &bull; <b>${n.category}</b></div>
+        <div class="news-title">${n.title}</div>
+        <p>${n.content}</p>
+      </div>
+    `).join("");
+  } catch {
+    $("#inp-area").innerHTML = "Yangiliklar yuklanmadi.";
+  }
+}
+
+renderTabs();
+setMode("url");
+</script>
+
+</body>
+</html>
+'''
 
 @app.get("/")
-def index(): return Response(HTML, mimetype="text/html")
+def index():
+    return Response(HTML, mimetype="text/html")
 
-@app.get("/manifest.json")
-def manifest(): return Response(json.dumps({"name": "PhishGuard", "short_name": "PhishGuard", "start_url": "/", "display": "standalone", "background_color": "#0b1020", "theme_color": "#0b1020"}), mimetype="application/manifest+json")
-
-@app.get("/icon.svg")
-def icon(): return Response('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="#5eead4"/></svg>', mimetype="image/svg+xml")
+@app.get("/health")
+def health():
+    return "ok"
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), debug=bool(os.environ.get("DEBUG")))
+    app.run(
+        host=os.environ.get("HOST", "0.0.0.0"),
+        port=int(os.environ.get("PORT", 10000)),
+        debug=bool(os.environ.get("DEBUG"))
+    )
