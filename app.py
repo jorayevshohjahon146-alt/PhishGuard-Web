@@ -1,6 +1,6 @@
 """
 PhishGuard Pro AI — raqamli xavfsizlik va kiberhujumlar tahlili ekotizimi.
-Ko'p tilli (i18n) versiya: Flask + SQLite (bitta fayl).
+Ko'p tilli (i18n) va to'liq murakkab versiya: Flask + SQLite (bitta fayl).
 """
 import hashlib, io, ipaddress, json, os, re, sqlite3, threading, time
 import urllib.request, wave, zipfile
@@ -67,6 +67,9 @@ def add_security_headers(resp):
         h.setdefault("Cache-Control", "no-store")
     h.setdefault("Referrer-Policy", "no-referrer")
     h.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    h.setdefault("Content-Security-Policy",
+                 "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+                 "img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
     return resp
 
 _hits, _lock = defaultdict(deque), threading.Lock()
@@ -190,7 +193,7 @@ TEXTS = {
         "total": "Total scans", "last7": "Last 7 days activity", "copy": "Copy", "copied": "Copied!", "demo_label": "Demo"
     }
 }
-TEXTS["kr"] = TEXTS["uz"] # Kirillcha uchun
+TEXTS["kr"] = TEXTS["uz"]
 
 def tr(lang):
     return {**TEXTS["en"], **TEXTS.get(lang, {})}
@@ -329,16 +332,8 @@ INDEX_HTML = r'''<!doctype html>
   <title>PhishGuard Pro AI — Cyber Ecosystem</title>
   <style>
     :root {
-      --bg: #070a12;
-      --card: #0f172a;
-      --bd: #1e293b;
-      --tx: #f8fafc;
-      --mu: #94a3b8;
-      --ac: #38bdf8;
-      --ac-glow: rgba(56, 189, 248, 0.25);
-      --low: #10b981;
-      --mid: #f59e0b;
-      --high: #ef4444;
+      --bg: #070a12; --card: #0f172a; --bd: #1e293b; --tx: #f8fafc; --mu: #94a3b8;
+      --ac: #38bdf8; --ac-glow: rgba(56, 189, 248, 0.25); --low: #10b981; --mid: #f59e0b; --high: #ef4444;
     }
     * { box-sizing: border-box; }
     body {
@@ -371,23 +366,37 @@ INDEX_HTML = r'''<!doctype html>
     textarea:focus, input:focus { border-color: var(--ac); box-shadow: 0 0 12px var(--ac-glow); }
     textarea { min-height: 110px; resize: vertical; }
     .btn { background: var(--ac); color: #070a12; border: 0; border-radius: 10px; padding: 12px 26px; font: inherit; font-weight: 800; cursor: pointer; }
+    .btn.ghost { background: transparent; border: 1px solid var(--bd); color: var(--tx); }
     .btn:hover { filter: brightness(1.1); }
     .res-box { margin-top: 16px; padding: 18px; border-radius: 14px; border: 1px solid var(--bd); background: rgba(7, 10, 18, 0.7); }
     .res-box.low { border-color: var(--low); } .res-box.mid { border-color: var(--mid); } .res-box.high { border-color: var(--high); }
     .badge { display: inline-block; padding: 5px 14px; border-radius: 30px; font-weight: 800; font-size: 11px; margin-bottom: 10px; text-transform: uppercase; }
     .badge.low { background: var(--low); color: #000; } .badge.mid { background: var(--mid); color: #000; } .badge.high { background: var(--high); color: #fff; }
+    .badge.demo { background: var(--mu); color: #fff; }
     ul { margin: 10px 0 0 18px; padding: 0; } li { margin-bottom: 6px; font-size: 13px; color: #d1d5db; }
+    .meter { background: var(--bd); height: 6px; border-radius: 3px; margin: 10px 0; overflow: hidden; }
+    .meter .fill { background: var(--ac); height: 100%; width: 0; transition: width 0.4s; }
+    .bar { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 13px; }
+    .bar .lbl { width: 50px; color: var(--mu); }
+    .bar .track { flex: 1; background: var(--bd); height: 8px; border-radius: 4px; overflow: hidden; }
+    .bar .track i { display: block; background: var(--ac); height: 100%; width: 0; }
+    .news { border-bottom: 1px solid var(--bd); padding-bottom: 10px; margin-bottom: 10px; }
+    .news small { color: var(--ac); font-weight: 600; }
+    .news b { display: block; font-size: 15px; margin: 2px 0; }
   </style>
 </head>
 <body>
 <header>
   <div class="brand"><div class="brand-pulse"></div><span id="header-title">PhishGuard Pro AI</span></div>
-  <select class="lang-select" id="langSelect">
-    <option value="uz">🇺🇿 O'zbek</option>
-    <option value="kr">🇺🇿 Ўзбек</option>
-    <option value="ru">🇷🇺 Русский</option>
-    <option value="en">🇬🇧 English</option>
-  </select>
+  <div style="display:flex; align-items:center; gap:14px;">
+    <span id="clock" style="font-size:12px; color:var(--mu);"></span>
+    <select class="lang-select" id="langSelect">
+      <option value="uz">🇺🇿 O'zbek</option>
+      <option value="kr">🇺🇿 Ўзбек</option>
+      <option value="ru">🇷🇺 Русский</option>
+      <option value="en">🇬🇧 English</option>
+    </select>
+  </div>
 </header>
 <main>
   <div class="nav-tabs" id="tabs"></div>
@@ -402,6 +411,7 @@ INDEX_HTML = r'''<!doctype html>
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const ls=(k,d)=>{try{return localStorage.getItem(k)||d}catch{return d}},sv=(k,v)=>{try{localStorage.setItem(k,v)}catch{}};
 let lang = ls("pg_lang", "uz");
+let last = null, waiting = false, CH = [], CLOG = [];
 
 const UI = {
   uz: {
@@ -413,6 +423,7 @@ const UI = {
     voice_t: "🎙 VoiceGuard", voice_d: "Ovozli xabar yoki audio fayl tahlili",
     chat_t: "🤖 AI Maslahatchi", chat_d: "Kiberxavfsizlik va dasturlash bo'yicha savol bering",
     news_t: "📰 Yangiliklar", news_d: "Kiberxavfsizlik va IT sohasidagi so'nggi yangiliklar",
+    stats_t: "📊 Statistika", stats_d: "Platformadagi umumiy tahlillar va faollik",
     analyzing: "Tahlil qilinmoqda..."
   },
   ru: {
@@ -424,6 +435,7 @@ const UI = {
     voice_t: "🎙 VoiceGuard", voice_d: "Анализ голосовых сообщений и аудиофайлов",
     chat_t: "🤖 AI Консультант", chat_d: "Задайте вопрос по кибербезопасности и программированию",
     news_t: "📰 Новости", news_d: "Последние новости в сфере ИТ и кибербезопасности",
+    stats_t: "📊 Статистика", stats_d: "Общая статистика анализов и активность",
     analyzing: "Анализируется..."
   },
   en: {
@@ -435,37 +447,41 @@ const UI = {
     voice_t: "🎙 VoiceGuard", voice_d: "Voice message and audio deepfake analysis",
     chat_t: "🤖 AI Consultant", chat_d: "Ask questions regarding cybersecurity and dev",
     news_t: "📰 News", news_d: "Latest news in IT and cybersecurity domain",
+    stats_t: "📊 Statistics", stats_d: "Overall platform scans and activity metrics",
     analyzing: "Analyzing..."
   }
 };
 UI.kr = UI.uz;
 
-const MODES = ["url", "message", "card", "file", "voice", "chat", "news"];
+function T() { return { ...(UI["en"] || {}), ...(UI[lang] || {}) }; }
+const MODES = ["url", "message", "card", "file", "voice", "chat", "news", "stats"];
 let cur = "url";
+
 const langSelect = $("#langSelect");
 langSelect.value = lang;
 langSelect.onchange = () => { lang = langSelect.value; sv("pg_lang", lang); updateUI(); };
 
 function updateUI(){
-  const t = UI[lang] || UI["uz"];
-  $("#header-title").textContent = t.brand;
+  const t = T();
+  $("#header-title").textContent = t.brand || "PhishGuard Pro AI";
   renderTabs();
   setMode(cur);
 }
 
 function renderTabs(){
-  const t = UI[lang] || UI["uz"];
-  $("#tabs").innerHTML = MODES.map(k=>`<button class="${k===cur?'on':''}" data-m="${k}">${t[k+'_t']}</button>`).join("");
+  const t = T();
+  $("#tabs").innerHTML = MODES.map(k=>`<button class="${k===cur?'on':''}" data-m="${k}">${t[k+'_t'] || k}</button>`).join("");
   $$("#tabs button").forEach(b=>b.onclick=()=>setMode(b.dataset.m));
 }
 
 function setMode(m){
-  cur = m; const t = UI[lang] || UI["uz"];
+  cur = m; const t = T();
   renderTabs();
-  $("#card-title").textContent = t[m+'_t'];
-  $("#card-desc").textContent = t[m+'_d'];
+  $("#card-title").textContent = t[m+'_t'] || m;
+  $("#card-desc").textContent = t[m+'_d'] || "";
   $("#out").innerHTML = "";
   if(m === "news"){ $("#inp-area").innerHTML = ""; loadNews(); return; }
+  if(m === "stats"){ $("#inp-area").innerHTML = ""; loadStats(); return; }
   if(m === "chat"){
     $("#inp-area").innerHTML = `<div id="cl" style="max-height:220px;overflow-y:auto;margin-bottom:12px;background:#070a12;padding:12px;border-radius:10px;border:1px solid var(--bd)"></div><textarea id="ci"></textarea><button class="btn" id="cb">${t.send}</button>`;
     $("#cb").onclick = () => sendChat($("#ci").value); return;
@@ -481,53 +497,107 @@ function setMode(m){
   }
 }
 
+async function api(url, opts) {
+  try { return await fetch(url, opts).then(r => r.json()); } catch { return { error: "Network error" }; }
+}
+
 async function runScan(m, textVal){
   if(!textVal.trim()) return;
-  const t = UI[lang] || UI["uz"];
+  const t = T();
   $("#out").innerHTML = `<div class="card">${t.analyzing}</div>`;
-  try {
-    const res = await fetch("/api/" + m, { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text: textVal, lang: lang}) }).then(r=>r.json());
-    renderResult(res);
-  } catch { $("#out").innerHTML = `<div class="card" style="color:red">Error</div>`; }
+  const res = await api("/api/" + m, { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text: textVal, lang: lang}) });
+  renderResult(res);
 }
 
 async function fileScan(fileObj, modeStr){
   if(!fileObj) return;
-  const t = UI[lang] || UI["uz"];
+  const t = T();
   const fd = new FormData(); fd.append(modeStr === "file" ? "file" : "audio", fileObj); fd.append("lang", lang);
   $("#out").innerHTML = `<div class="card">${t.analyzing}</div>`;
-  try {
-    const res = await fetch("/api/" + modeStr, {method: "POST", body: fd}).then(r=>r.json());
-    renderResult(res);
-  } catch { $("#out").innerHTML = `<div class="card" style="color:red">Error</div>`; }
+  const res = await api("/api/" + modeStr, {method: "POST", body: fd});
+  renderResult(res);
 }
 
-let CH = [];
-async function sendChat(tVal){
-  if(!tVal.trim()) return;
-  CH.push({role: "user", content: tVal}); $("#ci").value = "";
-  $("#cl").innerHTML = CH.map(x=>`<div style="margin-bottom:6px"><b>${x.role}:</b> ${x.content}</div>`).join("");
-  try {
-    const res = await fetch("/api/chat", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({messages: CH, lang: lang}) }).then(r=>r.json());
-    CH.push({role: "assistant", content: res.text || res.error});
-    $("#cl").innerHTML = CH.map(x=>`<div style="margin-bottom:6px"><b>${x.role}:</b> ${x.content}</div>`).join("");
-  } catch { CH.push({role: "assistant", content: "Error"}); }
+function esc(s) {
+  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function applyWidths() {
+  $$("[data-w]").forEach(el => { el.style.width = el.dataset.w + "%"; });
 }
 
 function renderResult(r){
-  if(r.error) { $("#out").innerHTML = `<div class="card">${r.error}</div>`; return; }
-  let extra = r.masked ? `<p><b>Brand:</b> ${r.brand} | ${r.masked}</p>` : "";
-  let reasons = (r.reasons||[]).map(x=>`<li><b>${x.t}:</b> ${x.why}</li>`).join("");
-  $("#out").innerHTML = `<div class="card res-box ${r.level}"><div class="badge ${r.level}">${r.label} (${r.score}/100)</div><p><b>Xulosa:</b> ${r.advice}</p>${extra}<ul>${reasons}</ul></div>`;
+  const t = T();
+  if(r.error) { $("#out").innerHTML = `<div class="card" style="color:var(--high)">${esc(r.error)}</div>`; return; }
+  last = r;
+  const demo = !!r.demo, lv = demo ? "demo" : r.level, score = Number(r.score) || 0;
+  let extra = "";
+  if (r.masked) extra += `<p><b>Brand:</b> ${esc(r.brand)} | ${esc(r.masked)}</p>`;
+  if (r.name) extra += `<p><b>${esc(r.name)}</b>${r.size != null ? ` - ${(r.size / 1024).toFixed(1)} KB` : ""}${r.duration ? ` - ${esc(r.duration)} s` : ""}</p>`;
+  if (r.sha256) extra += `<p><b>SHA-256:</b> <code>${esc(r.sha256)}</code><br><a href="https://www.virustotal.com/gui/file/${encodeURIComponent(r.sha256)}" target="_blank" rel="noopener noreferrer">VirusTotal ↗</a></p>`;
+  
+  const reasons = (r.reasons || []).map(x => `<li><b>${esc(x.t)}:</b> ${esc(x.why)}</li>`).join("");
+  const head = demo
+    ? `<span class="badge demo">${esc(t.demo_label || "Demo")}</span>`
+    : `<span class="badge ${lv}">${esc(r.label)} (${score}/100)</span>
+       <div class="meter"><div class="fill" data-w="${score}"></div></div>
+       <p>ℹ️ ${esc(r.advice)}</p>`;
+       
+  $("#out").innerHTML = `<div class="card res-box ${lv}">${head}${extra}<ul>${reasons}</ul>
+    <button class="btn ghost" id="cp" type="button" style="margin-top:14px;">${esc(t.copy || "Nusxalash")}</button></div>`;
+  $("#cp").onclick = copyReport;
+  applyWidths();
 }
 
-async function loadNews(){
-  try {
-    const res = await fetch("/api/news").then(r=>r.json());
-    $("#inp-area").innerHTML = res.map(n=>`<div style="border-bottom:1px solid var(--bd);padding-bottom:10px;margin-bottom:10px"><div style="font-size:11px;color:var(--ac);font-weight:600">${n.date} &bull; ${n.category}</div><div style="font-size:15px;font-weight:700;margin:2px 0">${n.title}</div><p style="margin:0">${n.content}</p></div>`).join("");
-  } catch { $("#inp-area").innerHTML = "Failed to load news."; }
+async function copyReport() {
+  if (!last) return;
+  const t = T();
+  const lines = [`${last.label} (${last.score}/100)`, last.advice, ...(last.reasons || []).map(x => `- ${x.t}: ${x.why}`)];
+  try { await navigator.clipboard.writeText(lines.join("\n")); alert(t.copied || "Nusxalandi!"); } catch {}
 }
 
+function drawChat() {
+  const el = $("#cl"); if (!el) return;
+  el.innerHTML = CLOG.map(x => `<div style="margin-bottom:8px; ${x.err?'color:var(--high)':''}"><b>${x.role === "user" ? "👤" : "🤖"}</b> ${esc(x.content)}</div>`).join("")
+    + (waiting ? `<div style="color:var(--mu)"><b>🤖</b> ...</div>` : "");
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendChat(v) {
+  if (!v.trim() || waiting) return;
+  CH.push({ role: "user", content: v }); CLOG.push({ role: "user", content: v });
+  $("#ci").value = ""; waiting = true; drawChat();
+  const res = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: CH, lang }) });
+  waiting = false;
+  if (res.text) { CH.push({ role: "assistant", content: res.text }); CLOG.push({ role: "assistant", content: res.text }); }
+  else { CH.pop(); CLOG.push({ role: "assistant", content: res.error || "Error", err: true }); }
+  drawChat();
+}
+
+async function loadNews() {
+  const res = await api("/api/news");
+  if (!Array.isArray(res)) { $("#inp-area").textContent = res.error || "Error"; return; }
+  $("#inp-area").innerHTML = res.map(n => `<div class="news"><small>${esc(n.date)} &bull; ${esc(n.category)}</small><b>${esc(n.title)}</b><p style="margin:0">${esc(n.content)}</p></div>`).join("");
+}
+
+async function loadStats() {
+  const t = T(), s = await api("/api/stats?lang=" + lang);
+  if (s.error) { $("#inp-area").textContent = s.error; return; }
+  const max = Math.max(1, ...(s.daily || []).map(d => d.count));
+  $("#inp-area").innerHTML =
+    `<p><b>${esc(t.total || "Jami")}:</b> ${Number(s.total || 0)}</p>` +
+    (s.levels || []).map(l => `<span class="badge ${esc(l.level)}">${esc(l.label)}: ${Number(l.count)}</span>`).join(" ") +
+    `<p class="muted" style="margin-top:14px;"><b>${esc(t.last7 || "Oxirgi 7 kun")}</b></p>` +
+    (s.daily || []).map(d => `<div class="bar"><span class="lbl">${esc(d.date)}</span><div class="track"><i data-w="${Math.round(d.count / max * 100)}"></i></div><span>${Number(d.count)}</span></div>`).join("") +
+    `<p class="muted" style="margin-top:10px; font-size:12px;">${(s.kinds || []).map(k => `${esc(k.kind)}: ${Number(k.count)}`).join(" &bull; ")}</p>`;
+  applyWidths();
+}
+
+function updateClock() {
+  const el = $("#clock");
+  if (el) el.textContent = new Intl.DateTimeFormat("uz-UZ", {hour:"2-digit",minute:"2-digit",second:"2-digit"}).format(new Date()) + " / LOCAL";
+}
+setInterval(updateClock, 1000); updateClock();
 updateUI();
 </script>
 </body>
