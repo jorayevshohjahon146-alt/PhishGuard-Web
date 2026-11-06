@@ -359,32 +359,36 @@ NEWS_FEEDS = [
     ("BleepingComputer", "https://www.bleepingcomputer.com/feed/"),
     ("Krebs on Security", "https://krebsonsecurity.com/feed/"),
 ]
-NEWS_TTL = 30 * 60  # 30 daqiqa kesh
-_news_cache = {"t": 0.0, "items": []}
+_news_cache = {"day": "", "t": 0.0, "items": [], "retry": 0.0}
 _news_lock = threading.Lock()
+_tr_cache, _tr_lock = {}, threading.Lock()
 
-# Internet bo'lmasa ko'rsatiladigan zaxira yangiliklar
-NEWS_FALLBACK = [
-    {"date": "", "title": "Fishing hujumlaridan himoyalanish: asosiy qoidalar",
-     "category": "PhishGuard", "source": "Offline",
-     "content": "Noma'lum havolalarni ochmang, SMS kodlarni hech kimga bermang, ikki bosqichli autentifikatsiyani yoqing.",
-     "link": ""},
-    {"date": "", "title": "Yangiliklar manbasiga ulanib bo'lmadi",
-     "category": "PhishGuard", "source": "Offline",
-     "content": "Server tashqi yangilik lentalariga hozircha ulana olmayapti. Birozdan keyin sahifani yangilang.",
-     "link": ""},
-]
+NEWS_LANG_NAMES = {
+    "uz": "Uzbek (Latin script, O'zbek tili)",
+    "kr": "Uzbek (Cyrillic script, Ўзбек тили)",
+    "ru": "Russian",
+}
+
+# Internet yoki manba bo'lmaganda ko'rsatiladigan zaxira (har til uchun)
+NEWS_FALLBACK = {
+    "uz": ("Yangiliklar manbasiga ulanib bo'lmadi",
+           "Server tashqi yangilik lentalariga hozircha ulana olmayapti. Birozdan keyin sahifani yangilang."),
+    "kr": ("Янгиликлар манбасига уланиб бўлмади",
+           "Сервер ташқи янгилик лентасига ҳозирча уланолмаяпти. Бироздан кейин саҳифани янгиланг."),
+    "ru": ("Не удалось подключиться к источникам новостей",
+           "Сервер пока не может получить внешние ленты новостей. Обновите страницу позже."),
+    "en": ("Could not reach the news sources",
+           "The server cannot reach external news feeds right now. Please refresh the page later."),
+}
+
+def today_key():
+    """Toshkent vaqti bo'yicha bugungi sana (UTC+5)."""
+    return (datetime.now(timezone.utc) + timedelta(hours=5)).strftime("%Y-%m-%d")
 
 def _clean(txt_, n):
     txt_ = html.unescape(re.sub(r"<[^>]+>", " ", txt_ or ""))
     txt_ = re.sub(r"\s+", " ", txt_).strip()
     return txt_[:n] + ("..." if len(txt_) > n else "")
-
-def fetch_feed(name, url):
-    req = urllib.request.Request(url, headers={"User-Agent": "PhishGuardNews/1.0"})
-    with urllib.request.urlopen(req, timeout=8) as r:
-        data = r.read(2_000_000)
-    return parse_feed(name, data)
 
 def parse_feed(name, data):
     root = ET.fromstring(data)
@@ -407,17 +411,27 @@ def parse_feed(name, data):
             break
     return items
 
+def fetch_feed(name, url):
+    req = urllib.request.Request(url, headers={"User-Agent": "PhishGuardNews/1.0"})
+    with urllib.request.urlopen(req, timeout=8) as r:
+        data = r.read(2_000_000)
+    return parse_feed(name, data)
+
 def load_news():
+    """Yangiliklar kuniga bir marta (Toshkent sanasi o'zgarganda) yangilanadi."""
     now = time.time()
     with _news_lock:
-        if _news_cache["items"] and now - _news_cache["t"] < NEWS_TTL:
-            return _news_cache["items"]
+        c = _news_cache
+        if now < c["retry"] or (c["items"] and c["day"] == today_key()):
+            return c["items"]
+
         def one(f):
             try:
                 return fetch_feed(*f)
             except Exception as e:
                 app.logger.error("Yangilik lentasi xatosi (%s): %r", f[0], e)
                 return []
+
         with ThreadPoolExecutor(max_workers=len(NEWS_FEEDS)) as ex:
             batches = list(ex.map(one, NEWS_FEEDS))
         items, seen = [], set()
@@ -426,15 +440,103 @@ def load_news():
                 seen.add(it["title"]); items.append(it)
         items = items[:12]
         if items:
-            _news_cache.update(t=now, items=items)
-            return items
-        if _news_cache["items"]:      # yangilab bo'lmadi, eskisini ko'rsatamiz
-            return _news_cache["items"]
-        return NEWS_FALLBACK
+            c.update(day=today_key(), t=now, items=items, retry=0.0)
+        else:
+            c["retry"] = now + 300  # 5 daqiqadan keyin qayta uriniladi
+        return c["items"]
+
+def ai_generate(prompt, system="", max_tokens=4000):
+    """Anthropic -> Gemini tartibida matn generatsiya qiladi. Xato bo'lsa None."""
+    akey = os.environ.get("ANTHROPIC_API_KEY")
+    if akey:
+        try:
+            body = json.dumps({"model": MODEL, "max_tokens": max_tokens, "system": system,
+                               "messages": [{"role": "user", "content": prompt}]}).encode()
+            req = urllib.request.Request("https://api.anthropic.com/v1/messages", body, {
+                "x-api-key": akey, "anthropic-version": "2023-06-01",
+                "content-type": "application/json"})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                d = json.load(r)
+            text = "".join(b.get("text", "") for b in d.get("content", [])).strip()
+            if text:
+                return text
+        except Exception as e:
+            app.logger.error("AI (Anthropic) xatosi: %r", e)
+    gkey = os.environ.get("GEMINI_API_KEY", "").strip()
+    if gkey:
+        models = []
+        for gm in (GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.5-flash-lite"):
+            if gm not in models:
+                models.append(gm)
+        payload = json.dumps({
+            "systemInstruction": {"parts": [{"text": system}]},
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {"responseMimeType": "application/json"}}).encode()
+        for gm in models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{gm}:generateContent"
+            for attempt in range(2):
+                try:
+                    req = urllib.request.Request(url, payload, {
+                        "Content-Type": "application/json", "x-goog-api-key": gkey})
+                    with urllib.request.urlopen(req, timeout=60) as resp:
+                        ans = json.load(resp)["candidates"][0]["content"]["parts"][0]["text"]
+                    if ans:
+                        return ans
+                except urllib.error.HTTPError as e:
+                    app.logger.error("AI (Gemini %s) xatosi: HTTP %s", gm, e.code)
+                    if e.code in (429, 500, 503) and attempt == 0:
+                        time.sleep(1.5)
+                        continue
+                    break
+                except Exception as e:
+                    app.logger.error("AI (Gemini %s) xatosi: %r", gm, e)
+                    break
+    return None
+
+def translate_news(items, lang):
+    """Yangiliklarni tanlangan tilga tarjima qiladi (kuniga bir marta, tilga bir marta)."""
+    if lang not in NEWS_LANG_NAMES or not items:
+        return items
+    stamp = _news_cache["t"]
+    with _tr_lock:
+        c = _tr_cache.get(lang)
+        if c and c["stamp"] == stamp and (not c["failed"] or time.time() < c["retry"]):
+            return c["items"]
+        src = [{"title": i["title"], "content": i["content"]} for i in items]
+        prompt = (
+            f"Translate the 'title' and 'content' fields of every object in this JSON array into "
+            f"{NEWS_LANG_NAMES[lang]}. Keep product/company names, CVE ids, file names and technical "
+            f"acronyms as they are. Return ONLY a JSON array with exactly {len(src)} objects, same order, "
+            f"each with keys \"title\" and \"content\".\n\n" + json.dumps(src, ensure_ascii=False))
+        result, ok = items, False
+        raw = ai_generate(prompt, "You are a precise news translator. Output valid JSON only.")
+        if raw:
+            try:
+                raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
+                arr = json.loads(raw)
+                if isinstance(arr, list) and len(arr) == len(items):
+                    result = [{**o, "title": str(t.get("title") or o["title"])[:300],
+                               "content": str(t.get("content") or o["content"])[:400],
+                               "translated": True} for o, t in zip(items, arr)]
+                    ok = True
+            except Exception as e:
+                app.logger.error("Tarjima JSON xatosi: %r", e)
+        _tr_cache[lang] = {"stamp": stamp, "items": result, "failed": not ok,
+                           "retry": time.time() + 300}
+        return result
 
 @app.get("/api/news")
 def api_news():
-    return jsonify([{k: v for k, v in i.items() if k != "ts"} for i in load_news()])
+    lang = request.args.get("lang", "uz")
+    if lang not in TEXTS:
+        lang = "uz"
+    items = load_news()
+    if not items:
+        title, content = NEWS_FALLBACK.get(lang, NEWS_FALLBACK["en"])
+        return jsonify([{"date": today_key(), "title": title, "category": "PhishGuard",
+                         "source": "Offline", "content": content, "link": ""}])
+    items = translate_news(items, lang)
+    return jsonify([{k: v for k, v in i.items() if k != "ts"} for i in items])
 
 @app.get("/api/stats")
 def api_stats():
@@ -990,14 +1092,14 @@ async function sendChat(v) {
 
 async function loadNews() {
   $("#inp-area").innerHTML = `<p>${esc(T().analyzing)}</p>`;
-  const res = await api("/api/news");
+  const res = await api("/api/news?lang=" + lang);
   if (!Array.isArray(res)) { $("#inp-area").textContent = res.error || "Error"; return; }
   $("#inp-area").innerHTML = res.map(n => {
     const safe = /^https?:\/\//.test(n.link || "");
     const title = safe
       ? `<a href="${esc(n.link)}" target="_blank" rel="noopener noreferrer" style="color:var(--tx);text-decoration:none">${esc(n.title)} ↗</a>`
       : esc(n.title);
-    return `<div class="news"><small>${esc(n.date)} &bull; ${esc(n.source || n.category)}</small><b>${title}</b><p style="margin:0">${esc(n.content)}</p></div>`;
+    return `<div class="news"><small>${esc(n.date)} &bull; ${esc(n.source || n.category)}${n.translated ? " &bull; 🌐 AI" : ""}</small><b>${title}</b><p style="margin:0">${esc(n.content)}</p></div>`;
   }).join("");
 }
 
