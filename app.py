@@ -483,30 +483,41 @@ def api_chat():
         except Exception as e:
             app.logger.error("Anthropic xatosi: %r", e)
 
-    # 2. Gemini
+    # 2. Gemini (band bo'lsa qayta urinadi va zaxira modellarga o'tadi)
     gemini_error = ""
     gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if gemini_key:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
-            contents = [{"role": "model" if m["role"] == "assistant" else "user",
-                         "parts": [{"text": m["content"]}]} for m in ms]
-            payload = json.dumps({
-                "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-                "contents": contents}).encode()
-            req = urllib.request.Request(url, payload, {
-                "Content-Type": "application/json",
-                "x-goog-api-key": gemini_key})
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                ans = json.load(resp)["candidates"][0]["content"]["parts"][0]["text"]
-            if ans:
-                return jsonify(text=ans)
-        except urllib.error.HTTPError as e:
-            gemini_error = f"HTTP {e.code}: {e.read().decode('utf-8', 'ignore')[:250]}"
-            app.logger.error("Gemini xatosi: %s", gemini_error)
-        except Exception as e:
-            gemini_error = repr(e)
-            app.logger.error("Gemini xatosi: %s", gemini_error)
+        models = []
+        for gm in (GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.5-flash-lite"):
+            if gm not in models:
+                models.append(gm)
+        contents = [{"role": "model" if m["role"] == "assistant" else "user",
+                     "parts": [{"text": m["content"]}]} for m in ms]
+        payload = json.dumps({
+            "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+            "contents": contents}).encode()
+        for gm in models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{gm}:generateContent"
+            for attempt in range(2):
+                try:
+                    req = urllib.request.Request(url, payload, {
+                        "Content-Type": "application/json",
+                        "x-goog-api-key": gemini_key})
+                    with urllib.request.urlopen(req, timeout=30) as resp:
+                        ans = json.load(resp)["candidates"][0]["content"]["parts"][0]["text"]
+                    if ans:
+                        return jsonify(text=ans)
+                except urllib.error.HTTPError as e:
+                    gemini_error = f"{gm} -> HTTP {e.code}: {e.read().decode('utf-8', 'ignore')[:200]}"
+                    app.logger.error("Gemini xatosi: %s", gemini_error)
+                    if e.code in (429, 500, 503) and attempt == 0:
+                        time.sleep(1.5)
+                        continue
+                    break
+                except Exception as e:
+                    gemini_error = f"{gm} -> {e!r}"
+                    app.logger.error("Gemini xatosi: %s", gemini_error)
+                    break
 
     # 3. Lokal zaxira
     reply = generate_local_ai_response(ms[-1]["content"], lang)
