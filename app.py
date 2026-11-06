@@ -389,16 +389,18 @@ def api_stats():
 
 def generate_local_ai_response(user_text, lang):
     q = user_text.lower()
-    if any(w in q for w in ["salom", "hello", "Привет", "privet", "assalom"]):
-        return "Assalomu alaykum! PhishGuard AI maslahatchisiman. Sizga kiberxavfsizlik, dasturlash yoki boshqa har qanday savol bo'yicha yordam berishga tayyorman."
-    elif any(w in q for w in ["parol", "password", "пароль"]):
-        return "Mustahkam parol yaratish uchun kamida 12 ta belgidan foydalaning, unga katta-kichik harflar, raqamlar va maxsus belgilarni (!@#$) aralashtiring. Parollarni har xil saytlar uchun takrorlamang."
-    elif any(w in q for w in ["fishing", "phishing", "фишинг"]):
-        return "Fishing — bu soxta havolalar yoki xabarlar orqali shaxsiy ma'lumotlaringizni o'g'irlash usuli. Shubhali havolalarga kirmang va SMS orqali kelgan tasdiqlash kodlarini hech kimga bermang."
-    elif any(w in q for w in ["python", "flask", "code", "kod", "program"]):
-        return "Dasturlash va kiberxavfsizlikda Python eng mashhur tillardan biridir. U orqali avtomatlashtirish, tahlil va xavfsizlik auditlarini tezkor amalga oshirish mumkin."
+    if any(w in q for w in ["salom", "hello", "privet", "assalom", "qalaysiz"]):
+        return "Assalomu alaykum! Men PhishGuard Pro AI maslahatchisiman. Sizga kiberxavfsizlik, dasturlash, matematika, tarmoqlar va istalgan boshqa mavzularda yordam berishdan mamnunman."
+    elif any(w in q for w in ["parol", "password", "пароль", "xavfsizlik"]):
+        return "🔐 **Parol xavfsizligi bo'yicha tavsiya:**\n- Kamida 12-16 ta belgidan foydalaning.\n- Katta/kichik harflar, raqamlar va maxsus belgilar (!@#$%) aralash bo'lsin.\n- Bir xil parolni barcha saytlar uchun ishlatmang."
+    elif any(w in q for w in ["fishing", "phishing", "фишинг", "firibgar", "aldash"]):
+        return "⚠️ **Fishingdan himoyalanish:**\n- Noma'lum havolalarga kirmang va shaxsiy ma'lumotlaringizni kiritmang.\n- Bank xodimlari hech qachon SMS kod yoki parolni so'ramaydi.\n- Har doim domen manzilini diqqat bilan tekshiring."
+    elif any(w in q for w in ["matematika", "math", "formula", "masala", "tenglama", "+", "-", "*", "/"]):
+        return f"📐 **Matematik tahlil:** '{user_text}' bo'yicha aytish mumkinki, aniq hisob-kitob yoki formulani yechishda qoidalar ketma-ketligiga rioya qilish muhim. Agar aniq misol yoki tenglama yozsangiz, uni bosqichma-bosqich yechib berishim mumkin!"
+    elif any(w in q for w in ["python", "flask", "code", "kod", "dastur", "function", "funksiya"]):
+        return f"💻 **Dasturlash bo'yicha:** Dasturlashda mantiqiy xatoliklarni oldini olish uchun kodni qism-qism tekshirish muhim. Siz yozgan mavzu bo'yicha savolingizni yoki kod parchasini tashlasangiz, birgalikda ko'rib chiqamiz!"
     else:
-        return f"Sizning savolingiz: '{user_text}'. Ushbu masala bo'yicha ehtiyotkorlik bilan yondashish va ma'lumotlar xavfsizligiga e'tibor qaratish tavsiya etiladi. Yana nimani bilishni xohlaysiz?"
+        return f"🤖 **AI Maslahatchi tahlili:**\nSizning «{user_text}» degan savolingiz bo'yicha shuni aytishim mumkinki, bu yo'nalishda chuqurroq ma'lumot olish uchun asosiy shartlarni tahlil qilish lozim. Menga yana qo'shimcha savollar bersangiz, batafsilroq tushuntirib beraman!"
 
 @app.post("/api/chat")
 def api_chat():
