@@ -3,7 +3,7 @@ PhishGuard Pro AI — raqamli xavfsizlik va kiberhujumlar tahlili ekotizimi.
 Ko'p tilli (i18n) va to'liq murakkab versiya: Flask + SQLite (bitta fayl).
 """
 import ast, hashlib, io, ipaddress, json, operator, os, re, sqlite3, threading, time
-import urllib.request, wave, zipfile
+import urllib.request, urllib.error, wave, zipfile
 from collections import defaultdict, deque
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -484,25 +484,35 @@ def api_chat():
             app.logger.error("Anthropic xatosi: %r", e)
 
     # 2. Gemini
-    gemini_key = os.environ.get("GEMINI_API_KEY")
+    gemini_error = ""
+    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if gemini_key:
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={gemini_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
             contents = [{"role": "model" if m["role"] == "assistant" else "user",
                          "parts": [{"text": m["content"]}]} for m in ms]
             payload = json.dumps({
                 "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
                 "contents": contents}).encode()
-            req = urllib.request.Request(url, payload, {"Content-Type": "application/json"})
+            req = urllib.request.Request(url, payload, {
+                "Content-Type": "application/json",
+                "x-goog-api-key": gemini_key})
             with urllib.request.urlopen(req, timeout=30) as resp:
                 ans = json.load(resp)["candidates"][0]["content"]["parts"][0]["text"]
             if ans:
                 return jsonify(text=ans)
+        except urllib.error.HTTPError as e:
+            gemini_error = f"HTTP {e.code}: {e.read().decode('utf-8', 'ignore')[:250]}"
+            app.logger.error("Gemini xatosi: %s", gemini_error)
         except Exception as e:
-            app.logger.error("Gemini xatosi: %r", e)
+            gemini_error = repr(e)
+            app.logger.error("Gemini xatosi: %s", gemini_error)
 
     # 3. Lokal zaxira
-    return jsonify(text=generate_local_ai_response(ms[-1]["content"], lang))
+    reply = generate_local_ai_response(ms[-1]["content"], lang)
+    if gemini_error:
+        reply += f"\n\n[Gemini xatosi: {gemini_error}]"
+    return jsonify(text=reply)
 
 INDEX_HTML = r'''<!doctype html>
 <html lang="uz">
