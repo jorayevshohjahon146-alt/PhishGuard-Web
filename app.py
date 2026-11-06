@@ -236,16 +236,14 @@ EXT_BAD = {"exe", "scr", "bat", "cmd", "js", "vbs", "jar", "msi", "apk", "com", 
 BAD_TLDS = {"xyz", "top", "gq", "ml", "cf", "tk", "pw", "cc", "su", "click", "loan"}
 SHORTENERS = {"bit.ly", "t.co", "goo.gl", "tinyurl.com", "is.gd", "buff.ly", "clck.ru"}
 
-@app.post("/api/url")
-def api_url():
-    lang = get_lang(); t = tr(lang)
-    raw = txt(500).strip()
+def url_risk(raw, t):
+    """URL xavfini hisoblaydi: (ball, [(sabab, tushuntirish), ...])"""
     u = urlparse(raw if "://" in raw else "https://" + raw)
     host = (u.hostname or "").lower()
     s, r = 0, []
 
     if not host or "." not in host:
-        return out("URL", raw, 50, [(t["invalid_url"], t["invalid_url_desc"])], lang)
+        return 50, [(t["invalid_url"], t["invalid_url_desc"])]
 
     if u.scheme == "http":
         s += 15; r.append((t["no_https"], t["no_https_desc"]))
@@ -276,6 +274,13 @@ def api_url():
         if b in host and not any(host == d or host.endswith("." + d) for d in domains):
             s += 50; r.append((t["imitation"].format(b), t["imitation_desc"].format(domains[0])))
 
+    return s, r
+
+@app.post("/api/url")
+def api_url():
+    lang = get_lang(); t = tr(lang)
+    raw = txt(500).strip()
+    s, r = url_risk(raw, t)
     return out("URL", raw, s, r or [(t["safe"], t["safe_desc"])], lang)
 
 @app.post("/api/message")
@@ -396,8 +401,15 @@ def api_stats():
 SYSTEM_PROMPT = (
     "You are PhishGuard Pro AI assistant. Answer any question helpfully and "
     "concisely. You are especially strong in cybersecurity. Reply in the "
-    "user's language (Uzbek, Russian or English)."
+    "user's language (Uzbek, Russian or English). "
+    "Use simple Markdown (bold, bullet lists). If the message contains an "
+    "'avto-skan' note with link scan results, explain those results to the user "
+    "in plain words. End EVERY answer with one final line that starts with "
+    "'🛡 Xavfsizlik maslahati:' followed by a short, practical cyber-safety tip "
+    "related to the topic (or a general one if unrelated)."
 )
+
+URL_RE = re.compile(r"(?:https?://|www\.)[^\s<>\"']+", re.I)
 
 # Xavfsiz kalkulyator (eval o'rniga)
 _OPS = {
@@ -462,13 +474,39 @@ def api_chat():
     if not ms:
         return jsonify(error="Xabar kiritilmadi"), 400
 
+    # Avto-skan: oxirgi xabardagi havolalarni tekshirish
+    t = tr(lang if lang in TEXTS else "uz")
+    scans, seen = [], set()
+    for u in URL_RE.findall(ms[-1]["content"]):
+        u = u.rstrip(".,;:!?)]}")
+        if not u or u in seen or len(scans) >= 3:
+            continue
+        seen.add(u)
+        sc, rs = url_risk(u, t)
+        sc = max(0, min(100, int(sc)))
+        lv = "low" if sc < 30 else "mid" if sc < 60 else "high"
+        try:
+            save_scan("Chat-URL", u, sc, lv, [{"t": a, "why": b} for a, b in rs])
+        except Exception:
+            pass
+        scans.append({"url": u[:80], "score": sc, "level": lv, "label": t.get(lv, lv),
+                      "reasons": [a for a, _ in rs][:4]})
+
+    model_ms = [dict(m) for m in ms]
+    if scans:
+        note = "; ".join(
+            f"{x['url']} -> {x['label']} ({x['score']}/100)"
+            + (": " + ", ".join(x["reasons"]) if x["reasons"] else "")
+            for x in scans)
+        model_ms[-1]["content"] += "\n\n[PhishGuard avto-skan natijasi: " + note + "]"
+
     # 1. Anthropic
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
     if anthropic_key:
         try:
             body = json.dumps({
                 "model": MODEL, "max_tokens": 1000,
-                "system": SYSTEM_PROMPT, "messages": ms
+                "system": SYSTEM_PROMPT, "messages": model_ms
             }).encode()
             req = urllib.request.Request(
                 "https://api.anthropic.com/v1/messages", body,
@@ -479,7 +517,7 @@ def api_chat():
                 d = json.load(r)
             text = "".join(b.get("text", "") for b in d.get("content", [])).strip()
             if text:
-                return jsonify(text=text)
+                return jsonify(text=text, scans=scans)
         except Exception as e:
             app.logger.error("Anthropic xatosi: %r", e)
 
@@ -492,7 +530,7 @@ def api_chat():
             if gm not in models:
                 models.append(gm)
         contents = [{"role": "model" if m["role"] == "assistant" else "user",
-                     "parts": [{"text": m["content"]}]} for m in ms]
+                     "parts": [{"text": m["content"]}]} for m in model_ms]
         payload = json.dumps({
             "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
             "contents": contents}).encode()
@@ -506,7 +544,7 @@ def api_chat():
                     with urllib.request.urlopen(req, timeout=30) as resp:
                         ans = json.load(resp)["candidates"][0]["content"]["parts"][0]["text"]
                     if ans:
-                        return jsonify(text=ans)
+                        return jsonify(text=ans, scans=scans)
                 except urllib.error.HTTPError as e:
                     gemini_error = f"{gm} -> HTTP {e.code}: {e.read().decode('utf-8', 'ignore')[:200]}"
                     app.logger.error("Gemini xatosi: %s", gemini_error)
@@ -523,7 +561,7 @@ def api_chat():
     reply = generate_local_ai_response(ms[-1]["content"], lang)
     if gemini_error:
         reply += f"\n\n[Gemini xatosi: {gemini_error}]"
-    return jsonify(text=reply)
+    return jsonify(text=reply, scans=scans)
 
 INDEX_HTML = r'''<!doctype html>
 <html lang="uz">
@@ -587,6 +625,17 @@ INDEX_HTML = r'''<!doctype html>
     .news small { color: var(--ac); font-weight: 600; }
     .news b { display: block; font-size: 15px; margin: 4px 0; color: var(--tx); }
     .voice-box { border: 1px dashed var(--bd); padding: 16px; border-radius: 12px; margin-bottom: 14px; text-align: center; background: rgba(15,23,42,0.4); }
+    .msg { margin-bottom: 10px; }
+    .msg.err { color: var(--high); }
+    .msg code { background: #1e293b; padding: 1px 6px; border-radius: 5px; font-size: 12.5px; }
+    .msg pre { background: #030712; border: 1px solid var(--bd); padding: 10px; border-radius: 8px; overflow-x: auto; margin: 6px 0; }
+    .msg ul { margin: 6px 0 6px 20px; }
+    .chip { display: inline-block; margin: 6px 6px 0 0; padding: 3px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 700; word-break: break-all; }
+    .chip.low { background: rgba(16,185,129,.15); color: var(--low); border: 1px solid var(--low); }
+    .chip.mid { background: rgba(245,158,11,.15); color: var(--mid); border: 1px solid var(--mid); }
+    .chip.high { background: rgba(239,68,68,.15); color: var(--high); border: 1px solid var(--high); }
+    #cl.scanning { animation: scanglow 1.2s ease-in-out infinite; }
+    @keyframes scanglow { 0%,100% { border-color: var(--bd); box-shadow: none; } 50% { border-color: var(--ac); box-shadow: 0 0 18px var(--ac-glow); } }
   </style>
 </head>
 <body>
@@ -626,7 +675,7 @@ const UI = {
     card_t: "💳 CardGuard", card_d: "Bank kartasi raqamini Luhn algoritmi va xavfsizlikka tekshirish",
     file_t: "📁 FileGuard & APK Shield", file_d: "Fayl, skript yoki APK ilova zararli kengaytmalarini tekshirish",
     voice_t: "🎙 VoiceGuard", voice_d: "Audio fayl yuklash yoki mikrofondan jonli yozib vishing/deepfake tahlili",
-    chat_t: "🤖 AI Maslahatchi", chat_d: "Istagan savolingizni bering, AI darhol javob beradi",
+    chat_t: "🤖 AI Maslahatchi", chat_d: "Istagan savol bering. Xabarga havola yozsangiz, PhishGuard uni avtomatik skan qiladi",
     news_t: "📰 Yangiliklar", news_d: "Jahon IT va kiberxavfsizlik bo'yicha so'nggi global yangiliklar",
     stats_t: "📊 Statistika", stats_d: "Platformadagi umumiy tahlillar va faollik",
     analyzing: "Ekspertizadan o'tkazilmoqda...", start_rec: "🔴 Yozishni boshlash", stop_rec: "⏹ To'xtatish va Tahlil Qilish", recording: "Ovoz yozilmoqda... Gapiring...", or_file: "Yoki audio fayl yuklang:"
@@ -638,7 +687,7 @@ const UI = {
     card_t: "💳 CardGuard", card_d: "Безопасная проверка номера карты по алгоритму Луна",
     file_t: "📁 FileGuard & APK Shield", file_d: "Проверка файлов, скриптов и APK на вредоносные расширения",
     voice_t: "🎙 VoiceGuard", voice_d: "Загрузка аудио или запись с микрофона для анализа вишинга/дипфейков",
-    chat_t: "🤖 AI Консультант", chat_d: "Задайте любой вопрос, ИИ ответит мгновенно",
+    chat_t: "🤖 AI Консультант", chat_d: "Задайте любой вопрос. Ссылки в сообщении PhishGuard проверит автоматически",
     news_t: "📰 Новости", news_d: "Мировые IT новости и свежие сводки кибербезопасности",
     stats_t: "📊 Статистика", stats_d: "Общая статистика анализов и активность",
     analyzing: "Анализируется...", start_rec: "🔴 Начать запись", stop_rec: "⏹ Остановить и Анализировать", recording: "Идет запись... Говорите...", or_file: "Или загрузите аудиофайл:"
@@ -650,7 +699,7 @@ const UI = {
     card_t: "💳 CardGuard", card_d: "Safe card number validation using Luhn algorithm",
     file_t: "📁 FileGuard & APK Shield", file_d: "Analyze files, scripts and APK packages for malicious extensions",
     voice_t: "🎙 VoiceGuard", voice_d: "Upload audio file or record live from microphone for vishing/deepfake analysis",
-    chat_t: "🤖 AI Consultant", chat_d: "Ask any question, AI will respond instantly",
+    chat_t: "🤖 AI Consultant", chat_d: "Ask anything. Links in your message are auto-scanned by PhishGuard",
     news_t: "📰 News", news_d: "Latest global IT and cybersecurity updates",
     stats_t: "📊 Statistics", stats_d: "Overall platform scans and activity metrics",
     analyzing: "Analyzing...", start_rec: "🔴 Start Recording", stop_rec: "⏹ Stop & Analyze", recording: "Recording in progress... Speak now...", or_file: "Or upload audio file:"
@@ -837,10 +886,36 @@ async function copyReport() {
   try { await navigator.clipboard.writeText(lines.join("\n")); alert(t.copied || "Nusxalandi!"); } catch {}
 }
 
+function renderMd(src) {
+  let s = esc(src);
+  const blocks = [];
+  s = s.replace(/```(?:\w+)?\n?([\s\S]*?)```/g, (m, c) => { blocks.push(c); return "\u0000B" + (blocks.length - 1) + "\u0000"; });
+  s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
+  s = s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<i>$2</i>");
+  const out = []; let inList = false;
+  for (const ln of s.split("\n")) {
+    const h = ln.match(/^#{1,3}\s+(.*)/);
+    const li = ln.match(/^\s*[*\-•]\s+(.*)/);
+    if (li) { if (!inList) { out.push("<ul>"); inList = true; } out.push("<li>" + li[1] + "</li>"); continue; }
+    if (inList) { out.push("</ul>"); inList = false; }
+    out.push(h ? "<b>" + h[1] + "</b><br>" : ln + "<br>");
+  }
+  if (inList) out.push("</ul>");
+  return out.join("").replace(/\u0000B(\d+)\u0000/g, (m, i) => "<pre><code>" + blocks[i] + "</code></pre>");
+}
+
 function drawChat() {
   const el = $("#cl"); if (!el) return;
-  el.innerHTML = CLOG.map(x => `<div style="margin-bottom:8px; white-space:pre-wrap; ${x.err?'color:var(--high)':''}"><b>${x.role === "user" ? "👤" : "🤖"}</b> ${esc(x.content)}</div>`).join("")
-    + (waiting ? `<div style="color:var(--mu)"><b>🤖</b> Yozmoqda...</div>` : "");
+  el.classList.toggle("scanning", waiting);
+  el.innerHTML = CLOG.map(x => {
+    if (x.role === "user") {
+      const chips = (x.scans || []).map(sc =>
+        `<div class="chip ${esc(sc.level)}">🛡 ${esc(sc.url)} — ${esc(sc.label)} (${Number(sc.score)}/100)</div>`).join("");
+      return `<div class="msg" style="white-space:pre-wrap"><b>👤</b> ${esc(x.content)}${chips}</div>`;
+    }
+    return `<div class="msg ${x.err ? "err" : ""}"><b>🤖</b> ${x.err ? esc(x.content) : renderMd(x.content)}</div>`;
+  }).join("") + (waiting ? `<div style="color:var(--mu)"><b>🤖</b> Yozmoqda...</div>` : "");
   el.scrollTop = el.scrollHeight;
 }
 
@@ -850,6 +925,9 @@ async function sendChat(v) {
   $("#ci").value = ""; waiting = true; drawChat();
   const res = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: CH, lang }) });
   waiting = false;
+  if (res.scans && res.scans.length) {
+    for (let i = CLOG.length - 1; i >= 0; i--) { if (CLOG[i].role === "user") { CLOG[i].scans = res.scans; break; } }
+  }
   if (res.text) { CH.push({ role: "assistant", content: res.text }); CLOG.push({ role: "assistant", content: res.text }); }
   else { CH.pop(); CLOG.push({ role: "assistant", content: res.error || "Xatolik yuz berdi", err: true }); }
   drawChat();
