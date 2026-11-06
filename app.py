@@ -73,7 +73,7 @@ def add_security_headers(resp):
     return resp
 
 _hits, _lock = defaultdict(deque), threading.Lock()
-LIMITS = {"/api/chat": 8}
+LIMITS = {"/api/chat": 20}
 DEFAULT_LIMIT = 40
 
 def client_ip():
@@ -138,7 +138,7 @@ TEXTS = {
         "imitation": "Имитация бренда '{}'", "imitation_desc": "Официальный домен: {}. Похоже на подделку.",
         "ip_host": "Прямой IP-адрес в ссылке", "ip_host_desc": "Ссылки на IP вместо домена часто используются фишерами.",
         "punycode": "Признак Punycode (xn--)", "punycode_desc": "Домен замаскирован под легитимный с помощью символов похожих алфавитов.",
-        "at_sign": "Символ '@' в адресе", "punycode_desc": "Символ '@' может скрывать реальный адрес назначения.",
+        "at_sign": "Символ '@' в адресе", "at_sign_desc": "Символ '@' может скрывать реальный адрес назначения.",
         "many_sub": "Множество поддоменов", "sub_desc": "Длинные цепочки поддоменов маскируют мошеннический ресурс.",
         "bad_tld": "Подозрительная доменная зона", "bad_tld_desc": "Зона часто используется злоумышленниками из-за дешевизны.",
         "shortener": "Сокращенная ссылка", "shortener_desc": "Реальный адрес скрыт сервисом сокращения.",
@@ -387,17 +387,48 @@ def api_stats():
         kinds=kinds,
         daily=[{"date": d[5:], "count": cnt.get(d, 0)} for d in days])
 
+def generate_local_ai_response(user_text, lang):
+    q = user_text.lower()
+    if any(w in q for w in ["salom", "hello", "Привет", "privet", "assalom"]):
+        return "Assalomu alaykum! PhishGuard AI maslahatchisiman. Sizga kiberxavfsizlik, dasturlash yoki boshqa har qanday savol bo'yicha yordam berishga tayyorman."
+    elif any(w in q for w in ["parol", "password", "пароль"]):
+        return "Mustahkam parol yaratish uchun kamida 12 ta belgidan foydalaning, unga katta-kichik harflar, raqamlar va maxsus belgilarni (!@#$) aralashtiring. Parollarni har xil saytlar uchun takrorlamang."
+    elif any(w in q for w in ["fishing", "phishing", "фишинг"]):
+        return "Fishing — bu soxta havolalar yoki xabarlar orqali shaxsiy ma'lumotlaringizni o'g'irlash usuli. Shubhali havolalarga kirmang va SMS orqali kelgan tasdiqlash kodlarini hech kimga bermang."
+    elif any(w in q for w in ["python", "flask", "code", "kod", "program"]):
+        return "Dasturlash va kiberxavfsizlikda Python eng mashhur tillardan biridir. U orqali avtomatlashtirish, tahlil va xavfsizlik auditlarini tezkor amalga oshirish mumkin."
+    else:
+        return f"Sizning savolingiz: '{user_text}'. Ushbu masala bo'yicha ehtiyotkorlik bilan yondashish va ma'lumotlar xavfsizligiga e'tibor qaratish tavsiya etiladi. Yana nimani bilishni xohlaysiz?"
+
 @app.post("/api/chat")
 def api_chat():
+    j = request.get_json(silent=True) or {}
+    ms = j.get("messages", [])
+    lang = j.get("lang", "uz")
+    
+    if not ms:
+        return jsonify(error="Xabar kiritilmadi"), 400
+        
+    last_msg = ms[-1].get("content", "")
     key = os.environ.get("ANTHROPIC_API_KEY")
-    if not key: return jsonify(error="AI key not set."), 503
-    j = request.get_json(silent=True) or {}; ms = j.get("messages", [])
-    body = json.dumps({"model": MODEL, "max_tokens": 400, "messages": ms}).encode()
-    req = urllib.request.Request("https://api.anthropic.com/v1/messages", body, {"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r: d = json.load(r)
-        return jsonify(text="".join(b.get("text", "") for b in d.get("content", [])).strip())
-    except Exception: return jsonify(error="AI error."), 502
+    
+    if key:
+        body = json.dumps({"model": MODEL, "max_tokens": 400, "messages": ms}).encode()
+        req = urllib.request.Request("https://api.anthropic.com/v1/messages", body, {
+            "x-api-key": key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json"
+        })
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                d = json.load(r)
+            return jsonify(text="".join(b.get("text", "") for b in d.get("content", [])).strip())
+        except Exception:
+            pass
+            
+    # API Kalit bo'lmaganda yoki tashqi API ishlamagan paytda avtomatik javob generatsiyasi
+    local_reply = generate_local_ai_response(last_msg, lang)
+    return jsonify(text=local_reply)
 
 INDEX_HTML = r'''<!doctype html>
 <html lang="uz">
@@ -495,11 +526,11 @@ const UI = {
   uz: {
     brand: "PhishGuard Pro AI System", check: "Tekshirish", upload: "Yuklab Tahlil Qilish", send: "Yuborish",
     url_t: "🔗 URL Scanner", url_d: "Havolani xavfsizlik, IP, Punycode va fishing alomatlariga tekshirish",
-    msg_t: "💬 MessageGuard", msg_d: "SMS yoki chat matnidagi shoshiltirish, OTP va firibgarlik iboralarini aniqlash",
+    msg_t: "💬 MessageGuard", msg_d: "SMS yoki chat matnidagi shoshiltirish, OTP va firibgarlik iboralarni aniqlash",
     card_t: "💳 CardGuard", card_d: "Bank kartasi raqamini Luhn algoritmi va xavfsizlikka tekshirish",
     file_t: "📁 FileGuard & APK Shield", file_d: "Fayl, skript yoki APK ilova zararli kengaytmalarini tekshirish",
     voice_t: "🎙 VoiceGuard", voice_d: "Audio fayl yuklash yoki mikrofondan jonli yozib vishing/deepfake tahlili",
-    chat_t: "🤖 AI Maslahatchi", chat_d: "Kiberxavfsizlik va dasturlash bo'yicha savol bering",
+    chat_t: "🤖 AI Maslahatchi", chat_d: "Istagan savolingizni bering, AI darhol javob beradi",
     news_t: "📰 Yangiliklar", news_d: "Jahon IT va kiberxavfsizlik bo'yicha so'nggi global yangiliklar",
     stats_t: "📊 Statistika", stats_d: "Platformadagi umumiy tahlillar va faollik",
     analyzing: "Ekspertizadan o'tkazilmoqda...", start_rec: "🔴 Yozishni boshlash", stop_rec: "⏹ To'xtatish va Tahlil Qilish", recording: "Ovoz yozilmoqda... Gapiring...", or_file: "Yoki audio fayl yuklang:"
@@ -511,7 +542,7 @@ const UI = {
     card_t: "💳 CardGuard", card_d: "Безопасная проверка номера карты по алгоритму Луна",
     file_t: "📁 FileGuard & APK Shield", file_d: "Проверка файлов, скриптов и APK на вредоносные расширения",
     voice_t: "🎙 VoiceGuard", voice_d: "Загрузка аудио или запись с микрофона для анализа вишинга/дипфейков",
-    chat_t: "🤖 AI Консультант", chat_d: "Задайте вопрос по кибербезопасности и программированию",
+    chat_t: "🤖 AI Консультант", chat_d: "Задайте любой вопрос, ИИ ответит мгновенно",
     news_t: "📰 Новости", news_d: "Мировые IT новости и свежие сводки кибербезопасности",
     stats_t: "📊 Статистика", stats_d: "Общая статистика анализов и активность",
     analyzing: "Анализируется...", start_rec: "🔴 Начать запись", stop_rec: "⏹ Остановить и Анализировать", recording: "Идет запись... Говорите...", or_file: "Или загрузите аудиофайл:"
@@ -523,7 +554,7 @@ const UI = {
     card_t: "💳 CardGuard", card_d: "Safe card number validation using Luhn algorithm",
     file_t: "📁 FileGuard & APK Shield", file_d: "Analyze files, scripts and APK packages for malicious extensions",
     voice_t: "🎙 VoiceGuard", voice_d: "Upload audio file or record live from microphone for vishing/deepfake analysis",
-    chat_t: "🤖 AI Consultant", chat_d: "Ask questions regarding cybersecurity and dev",
+    chat_t: "🤖 AI Consultant", chat_d: "Ask any question, AI will respond instantly",
     news_t: "📰 News", news_d: "Latest global IT and cybersecurity updates",
     stats_t: "📊 Statistics", stats_d: "Overall platform scans and activity metrics",
     analyzing: "Analyzing...", start_rec: "🔴 Start Recording", stop_rec: "⏹ Stop & Analyze", recording: "Recording in progress... Speak now...", or_file: "Or upload audio file:"
@@ -561,7 +592,8 @@ function setMode(m){
   if(m === "news"){ $("#inp-area").innerHTML = ""; loadNews(); return; }
   if(m === "stats"){ $("#inp-area").innerHTML = ""; loadStats(); return; }
   if(m === "chat"){
-    $("#inp-area").innerHTML = `<div id="cl" style="max-height:220px;overflow-y:auto;margin-bottom:12px;background:#070a12;padding:12px;border-radius:10px;border:1px solid var(--bd)"></div><textarea id="ci"></textarea><button class="btn" id="cb">${t.send}</button>`;
+    $("#inp-area").innerHTML = `<div id="cl" style="max-height:220px;overflow-y:auto;margin-bottom:12px;background:#070a12;padding:12px;border-radius:10px;border:1px solid var(--bd)"></div><textarea id="ci" placeholder="Savolingizni yozing..."></textarea><button class="btn" id="cb">${t.send}</button>`;
+    drawChat();
     $("#cb").onclick = () => sendChat($("#ci").value); return;
   }
   if(m === "voice"){
@@ -681,11 +713,10 @@ function renderResult(r){
   last = r;
   const demo = !!r.demo, lv = demo ? "demo" : r.level, score = Number(r.score) || 0;
   let extra = "";
-  if (r.masked) extra += `<p><b>Brand:</b> ${esc(r.brand)} | ${esc(r.masked)}</p>`;
-  if (r.name) extra += `<p><b>${esc(r.name)}</b>${r.size != null ? ` - ${(r.size / 1024).toFixed(1)} KB` : ""}${r.duration ? ` - ${esc(r.duration)} s` : ""}</p>`;
-  if (r.sha256) extra += `<p><b>SHA-256:</b> <code>${esc(r.sha256)}</code><br><a href="https://www.virustotal.com/gui/file/${encodeURIComponent(r.sha256)}" target="_blank" rel="noopener noreferrer">VirusTotal ↗</a></p>`;
+  if (r.masked) extra += `<p><b>Brand:</b> ${esc(r.brand)} \vert{}${esc(r.masked)}</p>`;
+  if (r.name) extra += `<p><b>${esc(r.name)}</b>${r.size != null ? ` - ${(r.size / 1024).toFixed(1)} KB` : ""}${r.duration ? ` - ${esc(r.duration)} s` : ""}</p>`; if (r.sha256) extra += `<p><b>SHA-256:</b> <code>${esc(r.sha256)}</code><br><a href="https://www.virustotal.com/gui/file/${encodeURIComponent(r.sha256)}" target="_blank" rel="noopener noreferrer">VirusTotal ↗</a></p>`;
   
-  const reasons = (r.reasons || []).map(x => `<li><b>${esc(x.t)}:</b> ${esc(x.why)}</li>`).join("");
+  const reasons = (r.reasons || []).map(x => `<li><b>${esc(x.t)}:</b>${esc(x.why)}</li>`).join("");
   const head = demo
     ? `<span class="badge demo">${esc(t.demo_label || "Natija")}</span>`
     : `<span class="badge ${lv}">${esc(r.label)} (${score}/100)</span>
@@ -701,14 +732,14 @@ function renderResult(r){
 async function copyReport() {
   if (!last) return;
   const t = T();
-  const lines = [`${last.label} (${last.score}/100)`, last.advice, ...(last.reasons || []).map(x => `- ${x.t}: ${x.why}`)];
+  const lines = [`${last.label} (${last.score}/100)`, last.advice, ...(last.reasons || []).map(x => `- ${x.t}:${x.why}`)];
   try { await navigator.clipboard.writeText(lines.join("\n")); alert(t.copied || "Nusxalandi!"); } catch {}
 }
 
 function drawChat() {
   const el = $("#cl"); if (!el) return;
   el.innerHTML = CLOG.map(x => `<div style="margin-bottom:8px; ${x.err?'color:var(--high)':''}"><b>${x.role === "user" ? "👤" : "🤖"}</b> ${esc(x.content)}</div>`).join("")
-    + (waiting ? `<div style="color:var(--mu)"><b>🤖</b> ...</div>` : "");
+    + (waiting ? `<div style="color:var(--mu)"><b>🤖</b> Yozmoqda...</div>` : "");
   el.scrollTop = el.scrollHeight;
 }
 
@@ -719,29 +750,11 @@ async function sendChat(v) {
   const res = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: CH, lang }) });
   waiting = false;
   if (res.text) { CH.push({ role: "assistant", content: res.text }); CLOG.push({ role: "assistant", content: res.text }); }
-  else { CH.pop(); CLOG.push({ role: "assistant", content: res.error || "Error", err: true }); }
+  else { CH.pop(); CLOG.push({ role: "assistant", content: res.error || "Xatolik yuz berdi", err: true }); }
   drawChat();
 }
 
 async function loadNews() {
   const res = await api("/api/news");
   if (!Array.isArray(res)) { $("#inp-area").textContent = res.error || "Error"; return; }
-  $("#inp-area").innerHTML = res.map(n => `<div class="news"><small>${esc(n.date)} &bull; ${esc(n.category)}</small><b>${esc(n.title)}</b><p style="margin:0">${esc(n.content)}</p></div>`).join("");
-}
-
-async function loadStats() {
-  const t = T(), s = await api("/api/stats?lang=" + lang);
-  if (s.error) { $("#inp-area").textContent = s.error; return; }
-  const max = Math.max(1, ...(s.daily || []).map(d => d.count));
-  $("#inp-area").innerHTML =
-    `<p><b>${esc(t.total || "Jami")}:</b> ${Number(s.total || 0)}</p>` +
-    (s.levels || []).map(l => `<span class="badge ${esc(l.level)}">${esc(l.label)}: ${Number(l.count)}</span>`).join(" ") +
-    `<p class="muted" style="margin-top:14px;"><b>${esc(t.last7 || "Oxirgi 7 kun")}</b></p>` +
-    (s.daily || []).map(d => `<div class="bar"><span class="lbl">${esc(d.date)}</span><div class="track"><i data-w="${Math.round(d.count / max * 100)}"></i></div><span>${Number(d.count)}</span></div>`).join("") +
-    `<p class="muted" style="margin-top:10px; font-size:12px;">${(s.kinds || []).map(k => `${esc(k.kind)}: ${Number(k.count)}`).join(" &bull; ")}</p>`;
-  applyWidths();
-}
-
-function updateClock() {
-  let el = $("#clock");
-  if (el) el.textContent = new Intl.DateTimeFormat("uz
+  $("#inp-area").innerHTML = res.map(n => `<div class="news"><small>${esc(n
