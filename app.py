@@ -2,7 +2,7 @@
 PhishGuard Pro AI — raqamli xavfsizlik va kiberhujumlar tahlili ekotizimi.
 Ko'p tilli (i18n) va to'liq murakkab versiya: Flask + SQLite (bitta fayl).
 """
-import hashlib, io, ipaddress, json, os, re, sqlite3, threading, time
+import ast, hashlib, io, ipaddress, json, operator, os, re, sqlite3, threading, time
 import urllib.request, wave, zipfile
 from collections import defaultdict, deque
 from contextlib import contextmanager
@@ -16,6 +16,7 @@ app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
 app.json.ensure_ascii = False
 DB_PATH = os.environ.get("PHISHGUARD_DB", os.path.join(BASE_DIR, "phishguard.db"))
 MODEL = os.environ.get("PHISHGUARD_MODEL", "claude-sonnet-5-5")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 RETENTION_DAYS = int(os.environ.get("PHISHGUARD_RETENTION_DAYS", "90"))
 
 # ------------------------------------------------------------------ DB
@@ -193,8 +194,11 @@ def tr(lang):
     return {**TEXTS["en"], **TEXTS.get(lang, {})}
 
 def get_lang():
-    j = request.get_json(silent=True) or {}
-    l = j.get("lang") if isinstance(j, dict) else request.args.get("lang")
+    j = request.get_json(silent=True)
+    if isinstance(j, dict):
+        l = j.get("lang")
+    else:
+        l = request.form.get("lang") or request.args.get("lang")
     return l if l in TEXTS else "uz"
 
 def out(kind, preview, score, reasons, lang="uz", extra=None):
@@ -239,58 +243,58 @@ def api_url():
     u = urlparse(raw if "://" in raw else "https://" + raw)
     host = (u.hostname or "").lower()
     s, r = 0, []
-    
+
     if not host or "." not in host:
         return out("URL", raw, 50, [(t["invalid_url"], t["invalid_url_desc"])], lang)
-        
+
     if u.scheme == "http":
         s += 15; r.append((t["no_https"], t["no_https_desc"]))
-        
+
     try:
         ipaddress.ip_address(host)
         s += 45; r.append((t["ip_host"], t["ip_host_desc"]))
     except ValueError:
         pass
-        
+
     if host.startswith("xn--") or ".xn--" in host:
         s += 40; r.append((t["punycode"], t["punycode_desc"]))
-        
+
     if "@" in raw:
         s += 35; r.append((t["at_sign"], t["at_sign_desc"]))
-        
+
     if host.count(".") > 3:
         s += 20; r.append((t["many_sub"], t["sub_desc"]))
-        
+
     tld = host.rsplit(".", 1)[-1]
     if tld in BAD_TLDS:
         s += 30; r.append((t["bad_tld"], t["bad_tld_desc"]))
-        
+
     if any(host == sh or host.endswith("." + sh) for sh in SHORTENERS):
         s += 25; r.append((t["shortener"], t["shortener_desc"]))
 
     for b, domains in BRANDS.items():
         if b in host and not any(host == d or host.endswith("." + d) for d in domains):
             s += 50; r.append((t["imitation"].format(b), t["imitation_desc"].format(domains[0])))
-            
+
     return out("URL", raw, s, r or [(t["safe"], t["safe_desc"])], lang)
 
 @app.post("/api/message")
 def api_msg():
     lang = get_lang(); t = tr(lang)
     raw = txt(3000); s, r = 0, []
-    
+
     if re.search(r"hozir|zudlik|tezda|darhol|shoshilinch|срочно|urgent|immediately|attention", raw, re.I):
         s += 25; r.append((t["urgency"], t["urgency_desc"]))
-        
+
     if re.search(r"kod|otp|parol|cvv|pin|sms|kodni|пароль|код|пин", raw, re.I):
         s += 45; r.append((t["secret_req"], t["secret_req_desc"]))
-        
+
     if re.search(r"yutuq|sovrin|bonus|aksiya|pul|win|prize|winner|million", raw, re.I):
         s += 30; r.append((t["prize"], t["prize_desc"]))
-        
+
     if re.search(r"blok|ochiriladi|to'xtatiladi|suspension|locked|blocked|заблокирован", raw, re.I):
         s += 35; r.append((t["acc_threat"], t["acc_threat_desc"]))
-        
+
     return out("Xabar", raw, s, r or [(t["no_msg_threat"], t["no_msg_threat_desc"])], lang)
 
 @app.post("/api/card")
@@ -299,12 +303,12 @@ def api_card():
     n = re.sub(r"\D", "", txt(200))[:19]; s, r = 0, []
     if len(n) < 13:
         return out("Karta", None, 0, [(t["card_len"], t["card_len_desc"])], lang)
-        
-    brand = "Uzcard" if n.startswith("8600") else "Humo" if n.startswith("9860") else "Visa" if n[0] == "4" else "Mastercard" if n[:2] in {"51","52","53","54","55"} else "Unknown"
-    
+
+    brand = "Uzcard" if n.startswith("8600") else "Humo" if n.startswith("9860") else "Visa" if n[0] == "4" else "Mastercard" if n[:2] in {"51", "52", "53", "54", "55"} else "Unknown"
+
     if not luhn(n):
         s += 40; r.append(("Luhn tekshiruvi xatosi", "Karta raqami matematik jihatdan noto'g'ri yoki soxtalashtirilgan."))
-        
+
     r.append((t["card_note"], t["card_note_desc"]))
     return out("Karta", None, s, r, lang, {"masked": n[:4] + " **** **** " + n[-4:], "brand": brand})
 
@@ -312,13 +316,14 @@ def api_card():
 def api_file():
     lang = get_lang(); t = tr(lang)
     f = request.files.get("file")
-    if not f: return jsonify(error="Fayl topilmadi"), 400
+    if not f:
+        return jsonify(error="Fayl topilmadi"), 400
     b = f.read(); name = f.filename or "file"; ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""; s, r = 0, []
     ex = {"sha256": hashlib.sha256(b).hexdigest(), "size": len(b), "name": name}
-    
+
     if ext in EXT_BAD:
         s += 50; r.append((t["bad_ext"].format(ext), t["bad_ext_desc"]))
-        
+
     return out("Fayl", name, s, r or [(t["file_clean"], t["file_clean_desc"])], lang, ex)
 
 @app.post("/api/voice")
@@ -330,7 +335,7 @@ def api_voice():
     b = f.read()
     size = len(b)
     s, r = 10, []
-    
+
     if size < 4000:
         s += 35
         r.append((t["vishing_warn"], t["vishing_warn_desc"]))
@@ -339,7 +344,7 @@ def api_voice():
         r.append((t["voice_deepfake"], t["voice_deepfake_desc"]))
     else:
         r.append((t["voice_clean"], t["voice_clean_desc"]))
-        
+
     return out("Ovoz", f.filename or "live_audio_stream", s, r, lang, {"size": size, "duration": round(size / 16000, 1)})
 
 @app.get("/api/news")
@@ -387,68 +392,117 @@ def api_stats():
         kinds=kinds,
         daily=[{"date": d[5:], "count": cnt.get(d, 0)} for d in days])
 
+# ------------------------------------------------------------------ AI Chat
+SYSTEM_PROMPT = (
+    "You are PhishGuard Pro AI assistant. Answer any question helpfully and "
+    "concisely. You are especially strong in cybersecurity. Reply in the "
+    "user's language (Uzbek, Russian or English)."
+)
+
+# Xavfsiz kalkulyator (eval o'rniga)
+_OPS = {
+    ast.Add: operator.add, ast.Sub: operator.sub,
+    ast.Mult: operator.mul, ast.Div: operator.truediv,
+    ast.USub: operator.neg, ast.UAdd: operator.pos,
+}
+
+def _calc(node):
+    if isinstance(node, ast.Expression):
+        return _calc(node.body)
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return node.value
+    if isinstance(node, ast.BinOp) and type(node.op) in _OPS:
+        return _OPS[type(node.op)](_calc(node.left), _calc(node.right))
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _OPS:
+        return _OPS[type(node.op)](_calc(node.operand))
+    raise ValueError("unsupported")
+
+def safe_calc(expr):
+    return _calc(ast.parse(expr, mode="eval"))
+
 def generate_local_ai_response(user_text, lang):
     q = user_text.strip()
     q_low = q.lower()
     try:
-        if re.match(r"^[\d\.\+\-\*\/\(\)\s]+$", q):
-            return f"🔢 **Hisob-kitob natijasi:**\n$$ {q} = {eval(q)} $$"
+        if re.match(r"^[\d\.\+\-\*\/\(\)\s]+$", q) and "**" not in q and len(q) < 60:
+            return f"🔢 Hisob-kitob natijasi: {q} = {safe_calc(q)}"
     except Exception:
         pass
     if "start up" in q_low or "startup" in q_low:
-        return "🚀 **Start-up (Startap)** — bu yangi, innovatsion g'oyaga asoslangan va tez o'sishga mo'ljallangan biznes loyiha."
+        return "🚀 Start-up (Startap) — bu yangi, innovatsion g'oyaga asoslangan va tez o'sishga mo'ljallangan biznes loyiha."
     elif any(w in q_low for w in ["salom", "hello", "privet", "assalom"]):
         return "Assalomu alaykum! Men PhishGuard Pro AI maslahatchisiman. Sizga kiberxavfsizlik, dasturlash va boshqa barcha savollar bo'yicha yordam berishga tayyorman."
     elif any(w in q_low for w in ["parol", "password", "пароль"]):
-        return "🔐 **Parol xavfsizligi:** Kuchli parol kamida 12 ta belgidan iborat bo'lib, katta-kichik harflar, raqamlar va maxsus belgilarni o'z ichiga olishi kerak."
+        return "🔐 Parol xavfsizligi: kuchli parol kamida 12 ta belgidan iborat bo'lib, katta-kichik harflar, raqamlar va maxsus belgilarni o'z ichiga olishi kerak."
     else:
-        return f"🤖 **AI Tahlili:**\nSizning «{q}» degan savolingiz bo'yicha batafsil yordam berishga tayyorman. Savolingizni aniqroq yozsangiz, to'liq javob beraman!"
+        return ("⚠️ Hozir tashqi AI xizmati ulanmagan, shuning uchun faqat oddiy savollarga javob bera olaman. "
+                "To'liq javob uchun serverda ANTHROPIC_API_KEY yoki GEMINI_API_KEY o'rnatilishi kerak.")
+
+def clean_messages(ms):
+    if not isinstance(ms, list):
+        return []
+    res = []
+    for m in ms[-20:]:
+        if not isinstance(m, dict):
+            continue
+        role = "assistant" if m.get("role") == "assistant" else "user"
+        content = str(m.get("content", ""))[:4000]
+        if content.strip():
+            res.append({"role": role, "content": content})
+    # Anthropic API birinchi xabar "user" bo'lishini talab qiladi
+    while res and res[0]["role"] != "user":
+        res.pop(0)
+    return res
 
 @app.post("/api/chat")
 def api_chat():
     j = request.get_json(silent=True) or {}
-    ms = j.get("messages", [])
+    ms = clean_messages(j.get("messages", []))
     lang = j.get("lang", "uz")
-    
     if not ms:
         return jsonify(error="Xabar kiritilmadi"), 400
-        
-    last_msg = ms[-1].get("content", "")
-    
-    # 1. Avval GEMINI_API_KEY tekshiriladi
-    gemini_key = os.environ.get("GEMINI_API_KEY")
-    if gemini_key:
-        try:
-            # Gemini API (gemini-1.5-flash) so'rovi
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-            payload = json.dumps({"contents": [{"parts": [{"text": m.get("content", "")} for m in ms]}]}).encode("utf-8")
-            req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                res_data = json.load(resp)
-                ans = res_data["candidates"][0]["content"]["parts"][0]["text"]
-                return jsonify(text=ans)
-        except Exception:
-            pass
 
-    # 2. Keyin ANTHROPIC_API_KEY tekshiriladi
+    # 1. Anthropic
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
     if anthropic_key:
         try:
-            body = json.dumps({"model": MODEL, "max_tokens": 400, "messages": ms}).encode()
-            req = urllib.request.Request("https://api.anthropic.com/v1/messages", body, {
-                "x-api-key": anthropic_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json"
-            })
+            body = json.dumps({
+                "model": MODEL, "max_tokens": 1000,
+                "system": SYSTEM_PROMPT, "messages": ms
+            }).encode()
+            req = urllib.request.Request(
+                "https://api.anthropic.com/v1/messages", body,
+                {"x-api-key": anthropic_key,
+                 "anthropic-version": "2023-06-01",
+                 "content-type": "application/json"})
             with urllib.request.urlopen(req, timeout=30) as r:
                 d = json.load(r)
-            return jsonify(text="".join(b.get("text", "") for b in d.get("content", [])).strip())
-        except Exception:
-            pass
-            
-    # 3. Agar kalitlar ishlamasa, kuchaytirilgan lokal AI javob beradi
-    local_reply = generate_local_ai_response(last_msg, lang)
-    return jsonify(text=local_reply)
+            text = "".join(b.get("text", "") for b in d.get("content", [])).strip()
+            if text:
+                return jsonify(text=text)
+        except Exception as e:
+            app.logger.error("Anthropic xatosi: %r", e)
+
+    # 2. Gemini
+    gemini_key = os.environ.get("GEMINI_API_KEY")
+    if gemini_key:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={gemini_key}"
+            contents = [{"role": "model" if m["role"] == "assistant" else "user",
+                         "parts": [{"text": m["content"]}]} for m in ms]
+            payload = json.dumps({
+                "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+                "contents": contents}).encode()
+            req = urllib.request.Request(url, payload, {"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                ans = json.load(resp)["candidates"][0]["content"]["parts"][0]["text"]
+            if ans:
+                return jsonify(text=ans)
+        except Exception as e:
+            app.logger.error("Gemini xatosi: %r", e)
+
+    # 3. Lokal zaxira
+    return jsonify(text=generate_local_ai_response(ms[-1]["content"], lang))
 
 INDEX_HTML = r'''<!doctype html>
 <html lang="uz">
@@ -465,7 +519,7 @@ INDEX_HTML = r'''<!doctype html>
     body {
       margin: 0; color: var(--tx); font: 14px/1.6 'Inter', system-ui, sans-serif; min-height: 100vh;
       background-color: var(--bg);
-      background-image: 
+      background-image:
         radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.08) 0%, transparent 40%),
         radial-gradient(circle at 85% 85%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
         linear-gradient(rgba(30, 41, 59, 0.2) 1px, transparent 1px),
@@ -495,6 +549,7 @@ INDEX_HTML = r'''<!doctype html>
     .btn.ghost { background: transparent; border: 1px solid var(--bd); color: var(--tx); }
     .btn.danger { background: var(--high); color: #fff; }
     .btn:hover { filter: brightness(1.1); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .res-box { margin-top: 16px; padding: 18px; border-radius: 14px; border: 1px solid var(--bd); background: rgba(7, 10, 18, 0.7); }
     .res-box.low { border-color: var(--low); } .res-box.mid { border-color: var(--mid); } .res-box.high { border-color: var(--high); }
     .badge { display: inline-block; padding: 5px 14px; border-radius: 30px; font-weight: 800; font-size: 11px; margin-bottom: 10px; text-transform: uppercase; }
@@ -581,6 +636,8 @@ const UI = {
   }
 };
 UI.kr = UI.uz;
+// "message" rejimi uchun kalitlar (msg_* ga alias)
+Object.keys(UI).forEach(l => { UI[l].message_t = UI[l].msg_t; UI[l].message_d = UI[l].msg_d; });
 
 function T() { return { ...(UI["en"] || {}), ...(UI[lang] || {}) }; }
 const MODES = ["url", "message", "card", "file", "voice", "chat", "news", "stats"];
@@ -614,7 +671,9 @@ function setMode(m){
   if(m === "chat"){
     $("#inp-area").innerHTML = `<div id="cl" style="max-height:220px;overflow-y:auto;margin-bottom:12px;background:#070a12;padding:12px;border-radius:10px;border:1px solid var(--bd)"></div><textarea id="ci" placeholder="Savolingizni yozing..."></textarea><button class="btn" id="cb">${t.send}</button>`;
     drawChat();
-    $("#cb").onclick = () => sendChat($("#ci").value); return;
+    $("#cb").onclick = () => sendChat($("#ci").value);
+    $("#ci").onkeydown = e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat($("#ci").value); } };
+    return;
   }
   if(m === "voice"){
     $("#inp-area").innerHTML = `
@@ -657,16 +716,16 @@ async function setupVoice() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaRecorder = new MediaRecorder(stream);
-    
+
     mediaRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); };
-    
+
     mediaRecorder.onstop = async () => {
       const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
       audioChunks = [];
       const fd = new FormData();
       fd.append("audio", audioBlob, "mic_recording.webm");
       fd.append("lang", lang);
-      
+
       $("#out").innerHTML = `<div class="card">${t.analyzing}</div>`;
       const res = await api("/api/voice", { method: "POST", body: fd });
       renderResult(res);
@@ -736,14 +795,14 @@ function renderResult(r){
   if (r.masked) extra += `<p><b>Brand:</b> ${esc(r.brand)} | ${esc(r.masked)}</p>`;
   if (r.name) extra += `<p><b>${esc(r.name)}</b>${r.size != null ? ` - ${(r.size / 1024).toFixed(1)} KB` : ""}${r.duration ? ` - ${esc(r.duration)} s` : ""}</p>`;
   if (r.sha256) extra += `<p><b>SHA-256:</b> <code>${esc(r.sha256)}</code><br><a href="https://www.virustotal.com/gui/file/${encodeURIComponent(r.sha256)}" target="_blank" rel="noopener noreferrer">VirusTotal ↗</a></p>`;
-  
+
   const reasons = (r.reasons || []).map(x => `<li><b>${esc(x.t)}:</b> ${esc(x.why)}</li>`).join("");
   const head = demo
     ? `<span class="badge demo">${esc(t.demo_label || "Natija")}</span>`
     : `<span class="badge ${lv}">${esc(r.label)} (${score}/100)</span>
        <div class="meter"><div class="fill" data-w="${score}"></div></div>
        <p>ℹ️ ${esc(r.advice)}</p>`;
-       
+
   $("#out").innerHTML = `<div class="card res-box ${lv}">${head}${extra}<ul>${reasons}</ul>
     <button class="btn ghost" id="cp" type="button" style="margin-top:14px;">${esc(t.copy || "Nusxalash")}</button></div>`;
   $("#cp").onclick = copyReport;
@@ -759,7 +818,7 @@ async function copyReport() {
 
 function drawChat() {
   const el = $("#cl"); if (!el) return;
-  el.innerHTML = CLOG.map(x => `<div style="margin-bottom:8px; ${x.err?'color:var(--high)':''}"><b>${x.role === "user" ? "👤" : "🤖"}</b> ${esc(x.content)}</div>`).join("")
+  el.innerHTML = CLOG.map(x => `<div style="margin-bottom:8px; white-space:pre-wrap; ${x.err?'color:var(--high)':''}"><b>${x.role === "user" ? "👤" : "🤖"}</b> ${esc(x.content)}</div>`).join("")
     + (waiting ? `<div style="color:var(--mu)"><b>🤖</b> Yozmoqda...</div>` : "");
   el.scrollTop = el.scrollHeight;
 }
