@@ -426,7 +426,6 @@ def api_chat():
         except Exception:
             pass
             
-    # API Kalit bo'lmaganda yoki tashqi API ishlamagan paytda avtomatik javob generatsiyasi
     local_reply = generate_local_ai_response(last_msg, lang)
     return jsonify(text=local_reply)
 
@@ -526,7 +525,7 @@ const UI = {
   uz: {
     brand: "PhishGuard Pro AI System", check: "Tekshirish", upload: "Yuklab Tahlil Qilish", send: "Yuborish",
     url_t: "🔗 URL Scanner", url_d: "Havolani xavfsizlik, IP, Punycode va fishing alomatlariga tekshirish",
-    msg_t: "💬 MessageGuard", msg_d: "SMS yoki chat matnidagi shoshiltirish, OTP va firibgarlik iboralarni aniqlash",
+    msg_t: "💬 MessageGuard", msg_d: "SMS yoki chat matnidagi shoshiltirish, OTP va firibgarlik iboralarini aniqlash",
     card_t: "💳 CardGuard", card_d: "Bank kartasi raqamini Luhn algoritmi va xavfsizlikka tekshirish",
     file_t: "📁 FileGuard & APK Shield", file_d: "Fayl, skript yoki APK ilova zararli kengaytmalarini tekshirish",
     voice_t: "🎙 VoiceGuard", voice_d: "Audio fayl yuklash yoki mikrofondan jonli yozib vishing/deepfake tahlili",
@@ -713,10 +712,11 @@ function renderResult(r){
   last = r;
   const demo = !!r.demo, lv = demo ? "demo" : r.level, score = Number(r.score) || 0;
   let extra = "";
-  if (r.masked) extra += `<p><b>Brand:</b> ${esc(r.brand)} \vert{}${esc(r.masked)}</p>`;
-  if (r.name) extra += `<p><b>${esc(r.name)}</b>${r.size != null ? ` - ${(r.size / 1024).toFixed(1)} KB` : ""}${r.duration ? ` - ${esc(r.duration)} s` : ""}</p>`; if (r.sha256) extra += `<p><b>SHA-256:</b> <code>${esc(r.sha256)}</code><br><a href="https://www.virustotal.com/gui/file/${encodeURIComponent(r.sha256)}" target="_blank" rel="noopener noreferrer">VirusTotal ↗</a></p>`;
+  if (r.masked) extra += `<p><b>Brand:</b> ${esc(r.brand)} | ${esc(r.masked)}</p>`;
+  if (r.name) extra += `<p><b>${esc(r.name)}</b>${r.size != null ? ` - ${(r.size / 1024).toFixed(1)} KB` : ""}${r.duration ? ` - ${esc(r.duration)} s` : ""}</p>`;
+  if (r.sha256) extra += `<p><b>SHA-256:</b> <code>${esc(r.sha256)}</code><br><a href="https://www.virustotal.com/gui/file/${encodeURIComponent(r.sha256)}" target="_blank" rel="noopener noreferrer">VirusTotal ↗</a></p>`;
   
-  const reasons = (r.reasons || []).map(x => `<li><b>${esc(x.t)}:</b>${esc(x.why)}</li>`).join("");
+  const reasons = (r.reasons || []).map(x => `<li><b>${esc(x.t)}:</b> ${esc(x.why)}</li>`).join("");
   const head = demo
     ? `<span class="badge demo">${esc(t.demo_label || "Natija")}</span>`
     : `<span class="badge ${lv}">${esc(r.label)} (${score}/100)</span>
@@ -732,7 +732,7 @@ function renderResult(r){
 async function copyReport() {
   if (!last) return;
   const t = T();
-  const lines = [`${last.label} (${last.score}/100)`, last.advice, ...(last.reasons || []).map(x => `- ${x.t}:${x.why}`)];
+  const lines = [`${last.label} (${last.score}/100)`, last.advice, ...(last.reasons || []).map(x => `- ${x.t}: ${x.why}`)];
   try { await navigator.clipboard.writeText(lines.join("\n")); alert(t.copied || "Nusxalandi!"); } catch {}
 }
 
@@ -757,4 +757,44 @@ async function sendChat(v) {
 async function loadNews() {
   const res = await api("/api/news");
   if (!Array.isArray(res)) { $("#inp-area").textContent = res.error || "Error"; return; }
-  $("#inp-area").innerHTML = res.map(n => `<div class="news"><small>${esc(n
+  $("#inp-area").innerHTML = res.map(n => `<div class="news"><small>${esc(n.date)} &bull; ${esc(n.category)}</small><b>${esc(n.title)}</b><p style="margin:0">${esc(n.content)}</p></div>`).join("");
+}
+
+async function loadStats() {
+  const t = T(), s = await api("/api/stats?lang=" + lang);
+  if (s.error) { $("#inp-area").textContent = s.error; return; }
+  const max = Math.max(1, ...(s.daily || []).map(d => d.count));
+  $("#inp-area").innerHTML =
+    `<p><b>${esc(t.total || "Jami")}:</b> ${Number(s.total || 0)}</p>` +
+    (s.levels || []).map(l => `<span class="badge ${esc(l.level)}">${esc(l.label)}: ${Number(s.total || 0) > 0 ? Number(l.count) : 0}</span>`).join(" ") +
+    `<p class="muted" style="margin-top:14px;"><b>${esc(t.last7 || "Oxirgi 7 kun")}</b></p>` +
+    (s.daily || []).map(d => `<div class="bar"><span class="lbl">${esc(d.date)}</span><div class="track"><i data-w="${Math.round(d.count / max * 100)}"></i></div><span>${Number(d.count)}</span></div>`).join("") +
+    `<p class="muted" style="margin-top:10px; font-size:12px;">${(s.kinds || []).map(k => `${esc(k.kind)}: ${Number(k.count)}`).join(" &bull; ")}</p>`;
+  applyWidths();
+}
+
+function updateClock() {
+  let el = $("#clock");
+  if (el) el.textContent = new Intl.DateTimeFormat("uz-UZ", {hour:"2-digit",minute:"2-digit",second:"2-digit"}).format(new Date()) + " / LOCAL";
+}
+setInterval(updateClock, 1000); updateClock();
+updateUI();
+</script>
+</body>
+</html>'''
+
+@app.get("/")
+def index():
+    return Response(INDEX_HTML, mimetype="text/html")
+
+@app.get("/health")
+def health():
+    try:
+        with db() as con:
+            con.execute("SELECT 1")
+        return jsonify(status="ok")
+    except Exception:
+        return jsonify(status="db_error"), 503
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
