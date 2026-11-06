@@ -2,11 +2,13 @@
 PhishGuard Pro AI — raqamli xavfsizlik va kiberhujumlar tahlili ekotizimi.
 Ko'p tilli (i18n) va to'liq murakkab versiya: Flask + SQLite (bitta fayl).
 """
-import ast, hashlib, io, ipaddress, json, operator, os, re, sqlite3, threading, time
+import ast, email.utils, html, hashlib, io, ipaddress, json, operator, os, re, sqlite3, threading, time
 import urllib.request, urllib.error, wave, zipfile
 from collections import defaultdict, deque
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 from flask import Flask, Response, jsonify, request
 
@@ -352,34 +354,87 @@ def api_voice():
 
     return out("Ovoz", f.filename or "live_audio_stream", s, r, lang, {"size": size, "duration": round(size / 16000, 1)})
 
+NEWS_FEEDS = [
+    ("The Hacker News", "https://feeds.feedburner.com/TheHackersNews"),
+    ("BleepingComputer", "https://www.bleepingcomputer.com/feed/"),
+    ("Krebs on Security", "https://krebsonsecurity.com/feed/"),
+]
+NEWS_TTL = 30 * 60  # 30 daqiqa kesh
+_news_cache = {"t": 0.0, "items": []}
+_news_lock = threading.Lock()
+
+# Internet bo'lmasa ko'rsatiladigan zaxira yangiliklar
+NEWS_FALLBACK = [
+    {"date": "", "title": "Fishing hujumlaridan himoyalanish: asosiy qoidalar",
+     "category": "PhishGuard", "source": "Offline",
+     "content": "Noma'lum havolalarni ochmang, SMS kodlarni hech kimga bermang, ikki bosqichli autentifikatsiyani yoqing.",
+     "link": ""},
+    {"date": "", "title": "Yangiliklar manbasiga ulanib bo'lmadi",
+     "category": "PhishGuard", "source": "Offline",
+     "content": "Server tashqi yangilik lentalariga hozircha ulana olmayapti. Birozdan keyin sahifani yangilang.",
+     "link": ""},
+]
+
+def _clean(txt_, n):
+    txt_ = html.unescape(re.sub(r"<[^>]+>", " ", txt_ or ""))
+    txt_ = re.sub(r"\s+", " ", txt_).strip()
+    return txt_[:n] + ("..." if len(txt_) > n else "")
+
+def fetch_feed(name, url):
+    req = urllib.request.Request(url, headers={"User-Agent": "PhishGuardNews/1.0"})
+    with urllib.request.urlopen(req, timeout=8) as r:
+        data = r.read(2_000_000)
+    return parse_feed(name, data)
+
+def parse_feed(name, data):
+    root = ET.fromstring(data)
+    items = []
+    for it in root.iter("item"):
+        title = _clean(it.findtext("title"), 200)
+        link = (it.findtext("link") or "").strip()
+        if not title or not link.startswith(("http://", "https://")):
+            continue
+        try:
+            dt = email.utils.parsedate_to_datetime(it.findtext("pubDate") or "")
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            dt = datetime.now(timezone.utc)
+        items.append({"ts": dt.timestamp(), "date": dt.strftime("%Y-%m-%d"),
+                      "title": title, "category": name, "source": name,
+                      "content": _clean(it.findtext("description"), 220), "link": link})
+        if len(items) >= 8:
+            break
+    return items
+
+def load_news():
+    now = time.time()
+    with _news_lock:
+        if _news_cache["items"] and now - _news_cache["t"] < NEWS_TTL:
+            return _news_cache["items"]
+        def one(f):
+            try:
+                return fetch_feed(*f)
+            except Exception as e:
+                app.logger.error("Yangilik lentasi xatosi (%s): %r", f[0], e)
+                return []
+        with ThreadPoolExecutor(max_workers=len(NEWS_FEEDS)) as ex:
+            batches = list(ex.map(one, NEWS_FEEDS))
+        items, seen = [], set()
+        for it in sorted((i for b in batches for i in b), key=lambda x: x["ts"], reverse=True):
+            if it["title"] not in seen:
+                seen.add(it["title"]); items.append(it)
+        items = items[:12]
+        if items:
+            _news_cache.update(t=now, items=items)
+            return items
+        if _news_cache["items"]:      # yangilab bo'lmadi, eskisini ko'rsatamiz
+            return _news_cache["items"]
+        return NEWS_FALLBACK
+
 @app.get("/api/news")
 def api_news():
-    return jsonify([
-        {
-            "date": "2026-11-02",
-            "title": "OpenAI Announces GPT-6 Architecture with Enhanced Zero-Day Threat Detection",
-            "category": "Artificial Intelligence",
-            "content": "OpenAI has unveiled its latest AI model, featuring native security auditing capabilities designed to identify software vulnerabilities before deployment."
-        },
-        {
-            "date": "2026-11-01",
-            "title": "Major Zero-Day Flaw Discovered in Popular Cloud Infrastructure Services",
-            "category": "Cybersecurity",
-            "content": "Security researchers have identified a critical remote code execution vulnerability affecting multi-cloud environments, urging immediate patching."
-        },
-        {
-            "date": "2026-10-30",
-            "title": "Apple & Google Release Unified Protocol Against Advanced Phishing Vectors",
-            "category": "Mobile Security",
-            "content": "Tech giants join forces to deploy hardware-level credential protection to prevent sophisticated SMS and QR-code phishing (quishing) attacks."
-        },
-        {
-            "date": "2026-10-28",
-            "title": "Python 3.15 Focuses on Strict Memory Safety and Automated Cryptography",
-            "category": "Programming",
-            "content": "The Python core team highlights new built-in cryptographic hardening features and memory safety protocols in the latest release candidate."
-        }
-    ])
+    return jsonify([{k: v for k, v in i.items() if k != "ts"} for i in load_news()])
 
 @app.get("/api/stats")
 def api_stats():
@@ -934,9 +989,16 @@ async function sendChat(v) {
 }
 
 async function loadNews() {
+  $("#inp-area").innerHTML = `<p>${esc(T().analyzing)}</p>`;
   const res = await api("/api/news");
   if (!Array.isArray(res)) { $("#inp-area").textContent = res.error || "Error"; return; }
-  $("#inp-area").innerHTML = res.map(n => `<div class="news"><small>${esc(n.date)} &bull; ${esc(n.category)}</small><b>${esc(n.title)}</b><p style="margin:0">${esc(n.content)}</p></div>`).join("");
+  $("#inp-area").innerHTML = res.map(n => {
+    const safe = /^https?:\/\//.test(n.link || "");
+    const title = safe
+      ? `<a href="${esc(n.link)}" target="_blank" rel="noopener noreferrer" style="color:var(--tx);text-decoration:none">${esc(n.title)} ↗</a>`
+      : esc(n.title);
+    return `<div class="news"><small>${esc(n.date)} &bull; ${esc(n.source || n.category)}</small><b>${title}</b><p style="margin:0">${esc(n.content)}</p></div>`;
+  }).join("");
 }
 
 async function loadStats() {
