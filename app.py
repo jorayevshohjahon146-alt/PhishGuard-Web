@@ -388,19 +388,21 @@ def api_stats():
         daily=[{"date": d[5:], "count": cnt.get(d, 0)} for d in days])
 
 def generate_local_ai_response(user_text, lang):
-    q = user_text.lower()
-    if any(w in q for w in ["salom", "hello", "privet", "assalom", "qalaysiz"]):
-        return "Assalomu alaykum! Men PhishGuard Pro AI maslahatchisiman. Sizga kiberxavfsizlik, dasturlash, matematika, tarmoqlar va istalgan boshqa mavzularda yordam berishdan mamnunman."
-    elif any(w in q for w in ["parol", "password", "пароль", "xavfsizlik"]):
-        return "🔐 **Parol xavfsizligi bo'yicha tavsiya:**\n- Kamida 12-16 ta belgidan foydalaning.\n- Katta/kichik harflar, raqamlar va maxsus belgilar (!@#$%) aralash bo'lsin.\n- Bir xil parolni barcha saytlar uchun ishlatmang."
-    elif any(w in q for w in ["fishing", "phishing", "фишинг", "firibgar", "aldash"]):
-        return "⚠️ **Fishingdan himoyalanish:**\n- Noma'lum havolalarga kirmang va shaxsiy ma'lumotlaringizni kiritmang.\n- Bank xodimlari hech qachon SMS kod yoki parolni so'ramaydi.\n- Har doim domen manzilini diqqat bilan tekshiring."
-    elif any(w in q for w in ["matematika", "math", "formula", "masala", "tenglama", "+", "-", "*", "/"]):
-        return f"📐 **Matematik tahlil:** '{user_text}' bo'yicha aytish mumkinki, aniq hisob-kitob yoki formulani yechishda qoidalar ketma-ketligiga rioya qilish muhim. Agar aniq misol yoki tenglama yozsangiz, uni bosqichma-bosqich yechib berishim mumkin!"
-    elif any(w in q for w in ["python", "flask", "code", "kod", "dastur", "function", "funksiya"]):
-        return f"💻 **Dasturlash bo'yicha:** Dasturlashda mantiqiy xatoliklarni oldini olish uchun kodni qism-qism tekshirish muhim. Siz yozgan mavzu bo'yicha savolingizni yoki kod parchasini tashlasangiz, birgalikda ko'rib chiqamiz!"
+    q = user_text.strip()
+    q_low = q.lower()
+    try:
+        if re.match(r"^[\d\.\+\-\*\/\(\)\s]+$", q):
+            return f"🔢 **Hisob-kitob natijasi:**\n$$ {q} = {eval(q)} $$"
+    except Exception:
+        pass
+    if "start up" in q_low or "startup" in q_low:
+        return "🚀 **Start-up (Startap)** — bu yangi, innovatsion g'oyaga asoslangan va tez o'sishga mo'ljallangan biznes loyiha."
+    elif any(w in q_low for w in ["salom", "hello", "privet", "assalom"]):
+        return "Assalomu alaykum! Men PhishGuard Pro AI maslahatchisiman. Sizga kiberxavfsizlik, dasturlash va boshqa barcha savollar bo'yicha yordam berishga tayyorman."
+    elif any(w in q_low for w in ["parol", "password", "пароль"]):
+        return "🔐 **Parol xavfsizligi:** Kuchli parol kamida 12 ta belgidan iborat bo'lib, katta-kichik harflar, raqamlar va maxsus belgilarni o'z ichiga olishi kerak."
     else:
-        return f"🤖 **AI Maslahatchi tahlili:**\nSizning «{user_text}» degan savolingiz bo'yicha shuni aytishim mumkinki, bu yo'nalishda chuqurroq ma'lumot olish uchun asosiy shartlarni tahlil qilish lozim. Menga yana qo'shimcha savollar bersangiz, batafsilroq tushuntirib beraman!"
+        return f"🤖 **AI Tahlili:**\nSizning «{q}» degan savolingiz bo'yicha batafsil yordam berishga tayyorman. Savolingizni aniqroq yozsangiz, to'liq javob beraman!"
 
 @app.post("/api/chat")
 def api_chat():
@@ -412,22 +414,39 @@ def api_chat():
         return jsonify(error="Xabar kiritilmadi"), 400
         
     last_msg = ms[-1].get("content", "")
-    key = os.environ.get("ANTHROPIC_API_KEY")
     
-    if key:
-        body = json.dumps({"model": MODEL, "max_tokens": 400, "messages": ms}).encode()
-        req = urllib.request.Request("https://api.anthropic.com/v1/messages", body, {
-            "x-api-key": key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json"
-        })
+    # 1. Avval GEMINI_API_KEY tekshiriladi
+    gemini_key = os.environ.get("GEMINI_API_KEY")
+    if gemini_key:
         try:
+            # Gemini API (gemini-1.5-flash) so'rovi
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+            payload = json.dumps({"contents": [{"parts": [{"text": m.get("content", "")} for m in ms]}]}).encode("utf-8")
+            req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                res_data = json.load(resp)
+                ans = res_data["candidates"][0]["content"]["parts"][0]["text"]
+                return jsonify(text=ans)
+        except Exception:
+            pass
+
+    # 2. Keyin ANTHROPIC_API_KEY tekshiriladi
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+    if anthropic_key:
+        try:
+            body = json.dumps({"model": MODEL, "max_tokens": 400, "messages": ms}).encode()
+            req = urllib.request.Request("https://api.anthropic.com/v1/messages", body, {
+                "x-api-key": anthropic_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            })
             with urllib.request.urlopen(req, timeout=30) as r:
                 d = json.load(r)
             return jsonify(text="".join(b.get("text", "") for b in d.get("content", [])).strip())
         except Exception:
             pass
             
+    # 3. Agar kalitlar ishlamasa, kuchaytirilgan lokal AI javob beradi
     local_reply = generate_local_ai_response(last_msg, lang)
     return jsonify(text=local_reply)
 
